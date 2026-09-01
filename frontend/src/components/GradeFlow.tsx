@@ -82,7 +82,7 @@ export const GradeFlow: React.FC<GradeFlowProps> = ({ questions, openResultId, o
   };
 
   if (viewingFromHistory && result) {
-    return <Stage3Result result={result} onGradeAnother={resetToForm} />;
+    return <Stage3Result result={result} onGradeAnother={resetToForm} onReviewed={onResultSaved} />;
   }
 
   return (
@@ -109,7 +109,7 @@ export const GradeFlow: React.FC<GradeFlowProps> = ({ questions, openResultId, o
         // second copy of the same three facts directly above it was pure
         // duplication, not a helpful reminder.
         <div ref={resultRef}>
-          <Stage3Result result={result} onGradeAnother={resetToForm} />
+          <Stage3Result result={result} onGradeAnother={resetToForm} onReviewed={onResultSaved} />
         </div>
       )}
     </div>

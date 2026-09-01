@@ -9,9 +9,13 @@ import { ArrowLeft, Terminal, Download } from 'lucide-react';
 interface Stage3ResultProps {
   result: GradingResult;
   onGradeAnother: () => void;
+  /** Called after this result is marked reviewed — lets the parent refresh
+   * anything derived from review status app-wide (the "Needs Review" nav
+   * badge count), which this component has no way to update on its own. */
+  onReviewed?: () => void;
 }
 
-export const Stage3Result: React.FC<Stage3ResultProps> = ({ result: initialResult, onGradeAnother }) => {
+export const Stage3Result: React.FC<Stage3ResultProps> = ({ result: initialResult, onGradeAnother, onReviewed }) => {
   const [result, setResult] = useState<GradingResult>(initialResult);
   const [annotations, setAnnotations] = useState<Annotation[]>(initialResult.annotations || []);
   const [selectedRubricPointId, setSelectedRubricPointId] = useState<string | null>(null);
@@ -23,7 +27,13 @@ export const Stage3Result: React.FC<Stage3ResultProps> = ({ result: initialResul
 
   return (
     <div>
-      <ResultHeader result={result} onReviewed={() => setResult(r => ({ ...r, needsHumanReview: false, reviewedAt: new Date().toISOString() }))} />
+      <ResultHeader
+        result={result}
+        onReviewed={() => {
+          setResult(r => ({ ...r, needsHumanReview: false, reviewedAt: new Date().toISOString() }));
+          onReviewed?.();
+        }}
+      />
 
       <div className="grading-grid">
         <PdfViewerCanvas result={result} selectedRubricPointId={selectedRubricPointId} onSelectRubricPoint={setSelectedRubricPointId} />
