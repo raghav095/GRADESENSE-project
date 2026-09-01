@@ -207,6 +207,17 @@ export async function runGradingPipeline(
   const annotations: Annotation[] = [];
   const layout = computeTextLayout(submission.studentAnswerText);
 
+  // A rubric criterion that depends on a diagram/figure can never be
+  // verified by this text-only pipeline — if the answer came from an
+  // uploaded document (PDF or DOCX, either of which can contain a real
+  // diagram as an embedded image, invisible to text extraction), the
+  // per-point feedback itself needs to say that plainly rather than stating
+  // "no diagram provided" with the same unqualified confidence as every
+  // other point — that reads as a confident, verified judgment when the
+  // model never actually looked at anything visual on the page.
+  const visualCriterionPattern = /\bdiagram\b|\bfigure\b|\bgraph\b|\bsketch\b|\bdraw(?:ing|n)?\b|\bplot\b|\bchart\b|\billustrat/i;
+  const isVisualEvidenceBlind = submission.sourceType !== 'pasted';
+
   for (let i = 0; i < rubricPoints.length; i++) {
     const r = rubricPoints[i];
     const rawPoint = rawOutput.pointResults.find(pr => pr.rubricPointId === r.id) || {
@@ -234,6 +245,12 @@ export async function runGradingPipeline(
     const pointStatus = rawPoint.status || (clampedMarks === r.maxMarks ? 'correct' : clampedMarks > 0 ? 'partial' : 'incorrect');
     const isMistakePoint = pointStatus !== 'correct' || clampedMarks < r.maxMarks;
 
+    const baseFeedback = rawPoint.feedback || 'Evaluated against rubric criterion.';
+    const feedback =
+      isVisualEvidenceBlind && visualCriterionPattern.test(r.criterion)
+        ? `${baseFeedback} (This system grades from extracted text only and did not look at any diagram/figure — verify this point against the original uploaded file.)`
+        : baseFeedback;
+
     pointResults.push({
       id: prId,
       gradingResultId,
@@ -245,7 +262,7 @@ export async function runGradingPipeline(
       evidenceMatched: matched,
       evidenceStart: matched ? startOffset : null,
       evidenceEnd: matched ? endOffset : null,
-      feedback: rawPoint.feedback || 'Evaluated against rubric criterion.',
+      feedback,
     });
 
     // Only auto-generate an annotation when the evidence is actually
@@ -279,29 +296,38 @@ export async function runGradingPipeline(
 
   const computedTotal = pointResults.reduce((sum, pr) => sum + pr.marksAwarded, 0);
 
-  // Step 5: Verification pass — re-check every point that has an evidence quote.
+  // Step 5: Verification pass — re-check every point that has an evidence
+  // quote. Each point's verification call is fully independent of every
+  // other, so they run concurrently (Promise.all) rather than one at a
+  // time — a rubric with 4-5 scored points previously meant 4-5 sequential
+  // LLM round-trips before this step could finish, which is exactly the
+  // "why does verifying evidence take so long" latency this was causing.
   let verificationAgreements = 0;
   let verificationTotal = 0;
   const disagreedCriteria: string[] = [];
 
   if (primaryGrader.verify) {
-    for (const pr of pointResults) {
-      if (pr.evidenceQuote) {
+    const verifyTasks = pointResults
+      .filter(pr => pr.evidenceQuote)
+      .map(pr => {
         const rp = rubricPoints.find(r => r.id === pr.rubricPointId);
-        if (rp) {
-          try {
-            const vRes = await primaryGrader.verify(question, rp, pr.evidenceQuote, pr.status);
-            logs.push(vRes.log);
-            verificationTotal++;
-            if (vRes.agrees) {
-              verificationAgreements++;
-            } else {
-              disagreedCriteria.push(rp.criterion);
-            }
-          } catch {
-            // ignore — verification is a confidence signal, not a hard requirement
-          }
-        }
+        if (!rp) return null;
+        return primaryGrader
+          .verify!(question, rp, pr.evidenceQuote!, pr.status)
+          .then(vRes => ({ criterion: rp.criterion, log: vRes.log, agrees: vRes.agrees }))
+          .catch(() => null); // ignore — verification is a confidence signal, not a hard requirement
+      })
+      .filter((t): t is NonNullable<typeof t> => t !== null);
+
+    const verifyResults = await Promise.all(verifyTasks);
+    for (const result of verifyResults) {
+      if (!result) continue;
+      logs.push(result.log);
+      verificationTotal++;
+      if (result.agrees) {
+        verificationAgreements++;
+      } else {
+        disagreedCriteria.push(result.criterion);
       }
     }
   }
@@ -316,20 +342,13 @@ export async function runGradingPipeline(
     : (quoteMatchRate * 0.5 + verifyRate * 0.5);
   const confidence = (isDegraded || isFailedSchema) ? Math.min(0.6, baseConfidence) : Number(baseConfidence.toFixed(2));
 
-  // A rubric criterion that depends on a diagram/figure can never be
-  // verified by this text-only pipeline — if the answer came from an
-  // uploaded document (PDF or DOCX, either of which can contain a real
-  // diagram as an embedded image, invisible to text extraction), confidently
-  // scoring that criterion either way is dishonest: the system genuinely
-  // didn't look at it. A pasted answer has no such gap — there's no
-  // possibility of an unseen image, so a missing-diagram criterion there is
-  // a confident, correct 0. Per the reliability rule ("if the system is
-  // uncertain, it should say so instead of pretending to be correct"), flag
-  // these for a human to check the original file rather than trusting the
-  // text-only score.
-  const visualCriterionPattern = /\bdiagram\b|\bfigure\b|\bgraph\b|\bsketch\b|\bdraw(?:ing|n)?\b|\bplot\b|\bchart\b|\billustrat/i;
-  const visualCriteriaNeedingReview =
-    submission.sourceType !== 'pasted' ? rubricPoints.filter(r => visualCriterionPattern.test(r.criterion)).map(r => r.criterion) : [];
+  // Same diagram/figure blindness computed in Step 4 (used there to caveat
+  // each matching point's own feedback text) — reused here to also force the
+  // overall review flag, per the reliability rule ("if the system is
+  // uncertain, it should say so instead of pretending to be correct").
+  const visualCriteriaNeedingReview = isVisualEvidenceBlind
+    ? rubricPoints.filter(r => visualCriterionPattern.test(r.criterion)).map(r => r.criterion)
+    : [];
 
   // needsHumanReview applies uniformly regardless of score — a full-score
   // result with a fabricated/unmatched evidence quote is exactly the case
