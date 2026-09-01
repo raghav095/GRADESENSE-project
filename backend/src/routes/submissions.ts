@@ -5,10 +5,18 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { getDb } from '../db/index.js';
 import { extractTextFromPdf } from '../services/pdfService.js';
+import { extractTextFromDocx } from '../services/docxService.js';
 import { runGradingPipeline } from '../services/gradingPipeline.js';
 import { toPublicFileUrl } from '../services/fileUrl.js';
 import { extractStudentMeta } from '../services/studentMeta.js';
 import { Submission } from '../services/types.js';
+
+// Only formats this pipeline can actually turn into text. Images (PNG/JPG)
+// are deliberately not supported — there's no OCR here, so an image upload
+// would silently produce zero extractable text and grade as a blank answer,
+// which is worse than telling the teacher up front to paste the text or
+// upload a PDF/DOCX instead.
+const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx']);
 
 const router = Router();
 
@@ -41,34 +49,54 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     let finalAnswerText = studentAnswerText || '';
     let filePath: string | undefined = undefined;
-    let sourceType: 'pasted' | 'pdf' = 'pasted';
+    let sourceType: 'pasted' | 'pdf' | 'docx' = 'pasted';
     let finalStudentName = (studentName || '').trim();
     let finalRollNumber = (rollNumber || '').trim();
     let extractionNote: string | undefined;
 
     if (req.file) {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      if (!SUPPORTED_EXTENSIONS.has(ext)) {
+        fs.unlinkSync(req.file.path); // uploaded but never going to be used — don't leave it on disk
+        return res.status(400).json({
+          error: `Unsupported file type "${ext || 'unknown'}" — upload a PDF or DOCX file, or use "Paste Text" instead. Image files (PNG/JPG) can't be read as text by this system.`,
+        });
+      }
+
       filePath = req.file.path;
-      sourceType = 'pdf';
+      sourceType = ext === '.docx' ? 'docx' : 'pdf';
       const fileBuffer = fs.readFileSync(filePath);
-      const { text: pdfText, pageCount } = await extractTextFromPdf(fileBuffer);
-      if (pdfText) {
-        finalAnswerText = pdfText;
+
+      let extractedText = '';
+      let pageCount = 1; // DOCX has no page concept here — treated as a single "page" for the length heuristic below
+
+      if (sourceType === 'docx') {
+        extractedText = await extractTextFromDocx(fileBuffer);
+      } else {
+        const pdfResult = await extractTextFromPdf(fileBuffer);
+        extractedText = pdfResult.text;
+        pageCount = pdfResult.pageCount;
+      }
+
+      if (extractedText) {
+        finalAnswerText = extractedText;
 
         // Fill in name/roll from the page itself only when the teacher left
         // the field blank — an explicitly typed value always wins.
-        const meta = extractStudentMeta(pdfText);
+        const meta = extractStudentMeta(extractedText);
         if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
         if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
       }
 
-      // A one-page PDF that yields under ~40 characters of extractable text
-      // usually means the page is mostly a scanned image, handwriting, or a
-      // diagram — pdfjs's text-only extraction can't read pixels. Flagging
-      // this distinctly means a near-empty extraction reads as "verify the
-      // original file," not as "the student wrote almost nothing."
-      if (pageCount > 0 && pdfText.length < pageCount * 40) {
-        extractionNote =
-          'This PDF yielded very little extractable text relative to its page count — it may contain a scanned image, handwriting, or a diagram that this system cannot read as text. Check the original uploaded file before trusting this score.';
+      // A one-page PDF (or any DOCX) that yields under ~40 characters of
+      // extractable text usually means the page is mostly a scanned image,
+      // handwriting, or a diagram — text extraction can't read pixels.
+      // Flagging this distinctly means a near-empty extraction reads as
+      // "verify the original file," not as "the student wrote almost nothing."
+      if (extractedText.length < pageCount * 40) {
+        extractionNote = `This ${sourceType === 'docx' ? 'DOCX' : 'PDF'} yielded very little extractable text${
+          sourceType === 'pdf' ? ' relative to its page count' : ''
+        } — it may contain a scanned image, handwriting, or a diagram that this system cannot read as text. Check the original uploaded file before trusting this score.`;
       }
     }
 

@@ -92,7 +92,20 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
   }, [hasContent]);
 
   const acceptFile = (f: File | null) => {
-    if (f && f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return;
+    if (!f) {
+      setFile(null);
+      return;
+    }
+    const name = f.name.toLowerCase();
+    if (!name.endsWith('.pdf') && !name.endsWith('.docx')) {
+      setError(
+        name.match(/\.(png|jpe?g)$/)
+          ? "Image files aren't supported — this tool can't read text from a photo or scan. Upload a PDF or DOCX, or paste the question text instead."
+          : 'Unsupported file type — upload a PDF or DOCX file, or paste the question text instead.'
+      );
+      return;
+    }
+    setError(null);
     setFile(f);
   };
 
@@ -237,8 +250,8 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
                   }}
                 >
                   <Upload size={14} />
-                  {file ? file.name : 'Drop the question paper here, or click to upload (PDF, optional)'}
-                  <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => acceptFile(e.target.files?.[0] || null)} />
+                  {file ? file.name : 'Drop the question paper here, or click to upload (PDF or DOCX, optional)'}
+                  <input id="question-pdf-upload" type="file" accept=".pdf,.docx" style={{ display: 'none' }} onChange={e => acceptFile(e.target.files?.[0] || null)} />
                 </label>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1.25rem' }}>

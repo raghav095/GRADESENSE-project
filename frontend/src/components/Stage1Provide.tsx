@@ -70,6 +70,7 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
   const [rubricOpen, setRubricOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [addQuestionOpen, setAddQuestionOpen] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   // `questions` arrives asynchronously (fetched in App.tsx), so it can still
   // be [] on this component's first render. Defaulting the selection with a
@@ -92,11 +93,27 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
     : !hasAnswer
     ? answerMode === 'upload'
       ? 'Upload the answer paper (or switch to Paste Text) to continue'
-      : 'Paste the answer text (or switch to Upload PDF) to continue'
+      : 'Paste the answer text (or switch to Upload File) to continue'
     : '';
 
   const acceptFile = (f: File | null) => {
-    if (f && f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return;
+    if (!f) {
+      setFile(null);
+      return;
+    }
+    const name = f.name.toLowerCase();
+    if (!name.endsWith('.pdf') && !name.endsWith('.docx')) {
+      // Previously a silent no-op — dropping an unsupported file appeared to
+      // do nothing at all, with no indication why. No OCR exists here, so an
+      // image (PNG/JPG) is explicitly called out rather than just rejected.
+      setFileError(
+        name.match(/\.(png|jpe?g)$/)
+          ? "Image files aren't supported — this tool can't read text from a photo or scan. Upload a PDF or DOCX, or use \"Paste Text\" instead."
+          : 'Unsupported file type — upload a PDF or DOCX file, or use "Paste Text" instead.'
+      );
+      return;
+    }
+    setFileError(null);
     setFile(f);
   };
 
@@ -107,6 +124,7 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
     if (mode === answerMode) return;
     if (mode === 'upload') setStudentAnswerText('');
     else setFile(null);
+    setFileError(null);
     setAnswerMode(mode);
   };
 
@@ -277,7 +295,7 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
               className={`btn ${answerMode === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
               style={{ flex: 1, fontSize: '0.8125rem' }}
             >
-              <FileText size={14} /> Upload PDF
+              <FileText size={14} /> Upload File
             </button>
             <button
               type="button"
@@ -291,9 +309,10 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
           </div>
 
           {answerMode === 'upload' ? (
-            // The whole panel is the label (not just the text inside it) —
-            // a label's click target extends only to its own content, so
-            // wrapping just the text left the surrounding padding inert.
+            <>
+            {/* The whole panel is the label (not just the text inside it) —
+                a label's click target extends only to its own content, so
+                wrapping just the text left the surrounding padding inert. */}
             <label
               htmlFor="file-upload"
               style={{
@@ -319,12 +338,23 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
             >
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                 <Upload size={22} color="var(--ink-soft)" />
-                <input type="file" accept=".pdf" disabled={disabled} onChange={e => acceptFile(e.target.files?.[0] || null)} style={{ display: 'none' }} id="file-upload" />
+                <input
+                  type="file"
+                  accept=".pdf,.docx"
+                  disabled={disabled}
+                  onChange={e => acceptFile(e.target.files?.[0] || null)}
+                  style={{ display: 'none' }}
+                  id="file-upload"
+                />
                 <span style={{ color: 'var(--ink)', fontWeight: 600, fontSize: '0.9375rem' }}>
-                  {file ? file.name : 'Drop a PDF here, or click to upload'}
+                  {file ? file.name : 'Drop a PDF or DOCX here, or click to upload'}
                 </span>
               </div>
             </label>
+            {fileError && (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.8125rem', color: 'var(--red-pen)' }}>{fileError}</div>
+            )}
+            </>
           ) : (
             <textarea
               className="form-textarea"

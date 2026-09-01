@@ -318,15 +318,18 @@ export async function runGradingPipeline(
 
   // A rubric criterion that depends on a diagram/figure can never be
   // verified by this text-only pipeline — if the answer came from an
-  // uploaded PDF (which can contain a real diagram as an image, invisible to
-  // text extraction), confidently scoring that criterion either way is
-  // dishonest: the system genuinely didn't look at it. Per the reliability
-  // rule ("if the system is uncertain, it should say so instead of
-  // pretending to be correct"), flag these for a human to check the
-  // original file rather than trusting the text-only score.
+  // uploaded document (PDF or DOCX, either of which can contain a real
+  // diagram as an embedded image, invisible to text extraction), confidently
+  // scoring that criterion either way is dishonest: the system genuinely
+  // didn't look at it. A pasted answer has no such gap — there's no
+  // possibility of an unseen image, so a missing-diagram criterion there is
+  // a confident, correct 0. Per the reliability rule ("if the system is
+  // uncertain, it should say so instead of pretending to be correct"), flag
+  // these for a human to check the original file rather than trusting the
+  // text-only score.
   const visualCriterionPattern = /\bdiagram\b|\bfigure\b|\bgraph\b|\bsketch\b|\bdraw(?:ing|n)?\b|\bplot\b|\bchart\b|\billustrat/i;
   const visualCriteriaNeedingReview =
-    submission.sourceType === 'pdf' ? rubricPoints.filter(r => visualCriterionPattern.test(r.criterion)).map(r => r.criterion) : [];
+    submission.sourceType !== 'pasted' ? rubricPoints.filter(r => visualCriterionPattern.test(r.criterion)).map(r => r.criterion) : [];
 
   // needsHumanReview applies uniformly regardless of score — a full-score
   // result with a fabricated/unmatched evidence quote is exactly the case

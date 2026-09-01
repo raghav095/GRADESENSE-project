@@ -2,8 +2,10 @@ import { Router } from 'express';
 import multer from 'multer';
 import { getDb } from '../db/index.js';
 import { extractTextFromPdf } from '../services/pdfService.js';
+import { extractTextFromDocx } from '../services/docxService.js';
 import { GeminiGrader, GraderCallError } from '../services/geminiGrader.js';
 import crypto from 'crypto';
+import path from 'path';
 
 const router = Router();
 
@@ -109,11 +111,17 @@ router.post('/draft', draftUpload.single('file'), async (req, res) => {
     let questionText = (req.body.text || '').trim();
 
     if (req.file) {
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      if (ext !== '.pdf' && ext !== '.docx') {
+        return res.status(400).json({
+          error: `Unsupported file type "${ext || 'unknown'}" — upload a PDF or DOCX file, or paste the question text instead.`,
+        });
+      }
       try {
-        const extracted = await extractTextFromPdf(req.file.buffer);
-        if (extracted.text) questionText = extracted.text;
+        const extractedText = ext === '.docx' ? await extractTextFromDocx(req.file.buffer) : (await extractTextFromPdf(req.file.buffer)).text;
+        if (extractedText) questionText = extractedText;
       } catch (err: any) {
-        return res.status(400).json({ error: `Could not read the uploaded PDF: ${err.message}` });
+        return res.status(400).json({ error: `Could not read the uploaded file: ${err.message}` });
       }
     }
 
