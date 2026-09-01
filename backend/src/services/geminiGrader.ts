@@ -3,6 +3,17 @@ import fs from 'fs';
 import { Grader, Question, RubricPoint, RawLlmGradingOutput, LlmCallLog, RubricStatus, GradeOptions } from './types.js';
 import { QuestionDraftSchema, QuestionDraft } from './questionDraftSchema.js';
 
+// Detects the real format from the file's own magic bytes rather than
+// assuming PNG — a page rasterized via pdftoppm is a PNG, but a directly
+// uploaded phone photo is very often a JPEG. The Gemini API has tolerated a
+// mismatched label in testing, but declaring the correct one is still the
+// honest, correct thing to send rather than relying on that leniency.
+function sniffImageMimeType(buf: Buffer): string {
+  if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'image/png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  return 'image/png'; // fallback guess — better than throwing on an unrecognized header
+}
+
 /** Thrown when a grader call fails — carries the partial log entry (if any) so the pipeline can still persist it for audit, even on failure. */
 export class GraderCallError extends Error {
   log?: Omit<LlmCallLog, 'id' | 'gradingResultId' | 'createdAt'>;
@@ -247,7 +258,7 @@ Return ONLY the transcribed text — no commentary, no markdown, no preamble.`;
     try {
       const parts: any[] = [{ text: prompt }];
       for (const img of pageImages) {
-        parts.push({ inlineData: { mimeType: 'image/png', data: img.toString('base64') } });
+        parts.push({ inlineData: { mimeType: sniffImageMimeType(img), data: img.toString('base64') } });
       }
 
       const response = await this.ai.models.generateContent({
@@ -258,7 +269,11 @@ Return ONLY the transcribed text — no commentary, no markdown, no preamble.`;
 
       const text = (response.text || '').trim();
       return text || null;
-    } catch {
+    } catch (err: any) {
+      // Best-effort enhancement, not a hard requirement — but a silently
+      // swallowed error here is undebuggable the one time this actually
+      // matters. Logged, not thrown: the caller still falls back cleanly.
+      console.error('transcribeHandwriting failed:', err?.message || err);
       return null;
     }
   }
@@ -299,7 +314,7 @@ Return ONLY a JSON object (no markdown fences, no prose):
     try {
       const parts: any[] = [{ text: prompt }];
       for (const img of pageImages) {
-        parts.push({ inlineData: { mimeType: 'image/png', data: img.toString('base64') } });
+        parts.push({ inlineData: { mimeType: sniffImageMimeType(img), data: img.toString('base64') } });
       }
 
       const response = await this.ai.models.generateContent({
@@ -317,7 +332,8 @@ Return ONLY a JSON object (no markdown fences, no prose):
         marksAwarded: parsed.satisfied ? maxMarks : 0,
         feedback: typeof parsed.feedback === 'string' ? parsed.feedback : 'Assessed from the uploaded page image.',
       };
-    } catch {
+    } catch (err: any) {
+      console.error('assessVisualCriterion failed:', err?.message || err);
       return null;
     }
   }
