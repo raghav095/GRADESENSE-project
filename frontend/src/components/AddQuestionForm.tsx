@@ -208,13 +208,21 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
               <div>
                 <div style={sectionLabelStyle}>The Question</div>
 
-                <div
+                <label
+                  htmlFor="question-pdf-upload"
                   style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
                     border: `1px dashed ${isDragOver ? 'var(--ink)' : 'var(--rule)'}`,
                     background: isDragOver ? '#FFFFFF' : 'var(--paper)',
                     padding: '1rem',
                     marginBottom: '1.25rem',
                     transition: 'border-color 0.15s, background 0.15s',
+                    cursor: 'pointer',
+                    fontSize: '0.8125rem',
+                    color: 'var(--ink)',
+                    fontWeight: 600,
                   }}
                   onDragOver={e => {
                     e.preventDefault();
@@ -227,12 +235,10 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
                     acceptFile(e.dataTransfer.files?.[0] || null);
                   }}
                 >
-                  <label htmlFor="question-pdf-upload" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--ink)', fontWeight: 600 }}>
-                    <Upload size={14} />
-                    {file ? file.name : 'Drop the question paper here, or click to upload (PDF, optional)'}
-                  </label>
+                  <Upload size={14} />
+                  {file ? file.name : 'Drop the question paper here, or click to upload (PDF, optional)'}
                   <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => acceptFile(e.target.files?.[0] || null)} />
-                </div>
+                </label>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1.25rem' }}>
                   <div className="form-group" style={{ marginBottom: 0 }}>

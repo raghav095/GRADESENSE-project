@@ -285,13 +285,19 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
           </div>
 
           {answerMode === 'upload' ? (
-            <div
+            // The whole panel is the label (not just the text inside it) —
+            // a label's click target extends only to its own content, so
+            // wrapping just the text left the surrounding padding inert.
+            <label
+              htmlFor="file-upload"
               style={{
+                display: 'block',
                 border: `1px dashed ${isDragOver ? 'var(--ink)' : 'var(--rule)'}`,
                 padding: '2rem 1.25rem',
                 textAlign: 'center',
                 background: isDragOver ? '#FFFFFF' : 'var(--paper)',
                 transition: 'border-color 0.15s, background 0.15s',
+                cursor: disabled ? 'default' : 'pointer',
               }}
               onDragOver={e => {
                 e.preventDefault();
@@ -308,11 +314,11 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                 <Upload size={22} color="var(--ink-soft)" />
                 <input type="file" accept=".pdf" disabled={disabled} onChange={e => acceptFile(e.target.files?.[0] || null)} style={{ display: 'none' }} id="file-upload" />
-                <label htmlFor="file-upload" style={{ cursor: disabled ? 'default' : 'pointer', color: 'var(--ink)', fontWeight: 600, fontSize: '0.9375rem' }}>
+                <span style={{ color: 'var(--ink)', fontWeight: 600, fontSize: '0.9375rem' }}>
                   {file ? file.name : 'Drop a PDF here, or click to upload'}
-                </label>
+                </span>
               </div>
-            </div>
+            </label>
           ) : (
             <textarea
               className="form-textarea"
