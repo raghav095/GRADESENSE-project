@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Question, GradingResult } from '../types';
-import { ChevronRight, ChevronDown, Upload, Plus } from 'lucide-react';
+import { ChevronRight, ChevronDown, Upload, Plus, FileText, Type } from 'lucide-react';
 import { AddQuestionForm } from './AddQuestionForm';
 
 interface Stage1ProvideProps {
@@ -16,6 +16,19 @@ interface Stage1ProvideProps {
   /** Called after a new question is created via AddQuestionForm — parent refetches the question list. */
   onQuestionCreated: () => void;
 }
+
+type AnswerMode = 'upload' | 'paste';
+
+const sectionLabelStyle: React.CSSProperties = {
+  fontSize: '0.75rem',
+  fontWeight: 700,
+  color: 'var(--ink-soft)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  marginBottom: '0.75rem',
+  paddingBottom: '0.5rem',
+  borderBottom: '1px solid var(--rule)',
+};
 
 // A per-question sample answer, so the "try a sample" link is scoped to
 // whichever question is actually selected rather than being a single
@@ -52,6 +65,7 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
   const [rollNumber, setRollNumber] = useState('');
   const [studentAnswerText, setStudentAnswerText] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [answerMode, setAnswerMode] = useState<AnswerMode>('upload');
   const [rubricOpen, setRubricOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [addQuestionOpen, setAddQuestionOpen] = useState(false);
@@ -75,12 +89,24 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
     : !selectedQuestionId
     ? 'Select a question to continue'
     : !hasAnswer
-    ? 'Provide an answer (upload a PDF or paste text) to continue'
+    ? answerMode === 'upload'
+      ? 'Upload the answer paper (or switch to Paste Text) to continue'
+      : 'Paste the answer text (or switch to Upload PDF) to continue'
     : '';
 
   const acceptFile = (f: File | null) => {
     if (f && f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return;
     setFile(f);
+  };
+
+  // The two ways of providing an answer are mutually exclusive — switching
+  // tabs clears the other, so there's never invisible state from a tab
+  // you're not looking at silently satisfying "hasAnswer".
+  const switchMode = (mode: AnswerMode) => {
+    if (mode === answerMode) return;
+    if (mode === 'upload') setStudentAnswerText('');
+    else setFile(null);
+    setAnswerMode(mode);
   };
 
   const runGrading = async () => {
@@ -119,6 +145,7 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
     setRollNumber(sample.rollNumber);
     setStudentAnswerText(sample.text);
     setFile(null);
+    setAnswerMode('paste');
   };
 
   const handleQuestionCreated = (newQuestionId: string) => {
@@ -129,9 +156,10 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
 
   return (
     <div className="card" style={{ maxWidth: 820, margin: '0 auto' }}>
-      <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', fontWeight: 600, color: 'var(--ink)', marginBottom: '1.25rem' }}>
-        Grade a Student Answer Paper
-      </h2>
+      <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.25rem', fontWeight: 600, color: 'var(--ink)' }}>Grade a Student Answer Paper</h2>
+      <p style={{ fontSize: '0.8125rem', color: 'var(--ink-soft)', marginTop: '0.25rem', marginBottom: '1.75rem' }}>
+        Pick the question, provide the student's answer, and grade it — that's the whole flow.
+      </p>
 
       {error && (
         <div style={{ background: '#FFF5F5', border: '1px solid var(--red-pen)', padding: '0.75rem 1rem', marginBottom: '1.25rem', color: 'var(--red-pen)', fontSize: '0.875rem' }}>
@@ -140,9 +168,11 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
       )}
 
       <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label className="form-label">Examination Question</label>
-          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
+        {/* Section 1 — which question */}
+        <div style={{ marginBottom: '1.75rem' }}>
+          <div style={sectionLabelStyle}>1. Examination Question</div>
+
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch', marginBottom: '0.75rem' }}>
             <select
               className="form-select"
               style={{ flex: 1 }}
@@ -173,105 +203,134 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
           </div>
 
           {addQuestionOpen && <AddQuestionForm onCreated={handleQuestionCreated} onCancel={() => setAddQuestionOpen(false)} />}
-        </div>
 
-        {selectedQuestion && !addQuestionOpen && (
-          <div style={{ marginBottom: '1.25rem' }}>
-            <button
-              type="button"
-              onClick={() => setRubricOpen(o => !o)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-soft)', fontSize: '0.8125rem', fontWeight: 600 }}
-            >
-              {rubricOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              View rubric criteria for this question ({selectedQuestion.maxMarks} Marks Available)
-            </button>
+          {/* Rubric disclosure + sample link grouped as one unit — reads as
+              "more about the question you picked", not two loose floating links. */}
+          {selectedQuestion && !addQuestionOpen && (
+            <div style={{ background: 'var(--paper)', border: '1px solid var(--rule)', padding: '0.75rem 1rem' }}>
+              <button
+                type="button"
+                onClick={() => setRubricOpen(o => !o)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink)', fontSize: '0.8125rem', fontWeight: 600 }}
+              >
+                {rubricOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                View rubric criteria ({selectedQuestion.maxMarks} Marks Available)
+              </button>
 
-            {rubricOpen && (
-              <div style={{ background: 'var(--paper)', border: '1px solid var(--rule)', padding: '0.875rem 1rem', marginTop: '0.5rem' }}>
-                <ul style={{ paddingLeft: '1.25rem', fontSize: '0.8125rem', color: 'var(--ink)' }}>
+              {rubricOpen && (
+                <ul style={{ paddingLeft: '1.25rem', fontSize: '0.8125rem', color: 'var(--ink)', marginTop: '0.6rem' }}>
                   {selectedQuestion.rubricPoints?.map(rp => (
                     <li key={rp.id} style={{ marginBottom: '0.25rem' }}>
                       <strong className="mono">[{rp.maxMarks}M]:</strong> {rp.criterion}
                     </li>
                   ))}
                 </ul>
-              </div>
-            )}
+              )}
 
-            {SAMPLE_ANSWERS[selectedQuestionId] && (
-              <button
-                type="button"
-                onClick={loadSample}
-                disabled={disabled}
-                style={{ display: 'block', marginTop: '0.5rem', background: 'none', border: 'none', padding: 0, cursor: disabled ? 'default' : 'pointer', color: 'var(--ink-soft)', fontSize: '0.8125rem', textDecoration: 'underline', opacity: disabled ? 0.5 : 1 }}
-              >
-                Try a sample answer for this question
-              </button>
-            )}
-          </div>
-        )}
+              {SAMPLE_ANSWERS[selectedQuestionId] && (
+                <button
+                  type="button"
+                  onClick={loadSample}
+                  disabled={disabled}
+                  style={{ display: 'block', marginTop: '0.6rem', background: 'none', border: 'none', padding: 0, cursor: disabled ? 'default' : 'pointer', color: 'var(--ink-soft)', fontSize: '0.8125rem', textDecoration: 'underline', opacity: disabled ? 0.5 : 1 }}
+                >
+                  Try a sample answer for this question
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-          <div className="form-group">
-            <label className="form-label">Student Name</label>
-            <input type="text" className="form-input" value={studentName} disabled={disabled} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Ananya Rao" />
+        {/* Section 2 — who */}
+        <div style={{ marginBottom: '1.75rem' }}>
+          <div style={sectionLabelStyle}>
+            2. Student Details <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 'normal' }}>(optional)</span>
           </div>
-          <div className="form-group">
-            <label className="form-label">Roll Number</label>
-            <input type="text" className="form-input" value={rollNumber} disabled={disabled} onChange={e => setRollNumber(e.target.value)} placeholder="e.g. 24B" />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Student Name</label>
+              <input type="text" className="form-input" value={studentName} disabled={disabled} onChange={e => setStudentName(e.target.value)} placeholder="e.g. Ananya Rao" />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Roll Number</label>
+              <input type="text" className="form-input" value={rollNumber} disabled={disabled} onChange={e => setRollNumber(e.target.value)} placeholder="e.g. 24B" />
+            </div>
           </div>
         </div>
 
-        <div className="form-group">
-          <label className="form-label">Answer Paper</label>
-          <div
-            style={{
-              border: `1px dashed ${isDragOver ? 'var(--ink)' : 'var(--rule)'}`,
-              padding: '1.25rem',
-              textAlign: 'center',
-              background: isDragOver ? '#FFFFFF' : 'var(--paper)',
-              transition: 'border-color 0.15s, background 0.15s',
-            }}
-            onDragOver={e => {
-              e.preventDefault();
-              if (!disabled) setIsDragOver(true);
-            }}
-            onDragLeave={() => setIsDragOver(false)}
-            onDrop={e => {
-              e.preventDefault();
-              setIsDragOver(false);
-              if (disabled) return;
-              acceptFile(e.dataTransfer.files?.[0] || null);
-            }}
-          >
-            <Upload size={20} color="var(--ink-soft)" style={{ margin: '0 auto 0.375rem' }} />
-            <input type="file" accept=".pdf" disabled={disabled} onChange={e => acceptFile(e.target.files?.[0] || null)} style={{ display: 'none' }} id="file-upload" />
-            <label htmlFor="file-upload" style={{ cursor: disabled ? 'default' : 'pointer', color: 'var(--ink)', fontWeight: 600, fontSize: '0.875rem' }}>
-              {file ? file.name : 'Drop a PDF here, or click to upload'}
-            </label>
-            <div style={{ fontSize: '0.75rem', color: 'var(--ink-soft)', marginTop: '0.25rem' }}>— or paste text below —</div>
+        {/* Section 3 — the answer, one input method visible at a time instead
+            of an upload box always sitting above a mostly-empty paste box. */}
+        <div style={{ marginBottom: '1.75rem' }}>
+          <div style={sectionLabelStyle}>3. Answer Paper</div>
+
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={() => switchMode('upload')}
+              disabled={disabled}
+              className={`btn ${answerMode === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1, fontSize: '0.8125rem' }}
+            >
+              <FileText size={14} /> Upload PDF
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('paste')}
+              disabled={disabled}
+              className={`btn ${answerMode === 'paste' ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ flex: 1, fontSize: '0.8125rem' }}
+            >
+              <Type size={14} /> Paste Text
+            </button>
           </div>
 
-          {!file && (
+          {answerMode === 'upload' ? (
+            <div
+              style={{
+                border: `1px dashed ${isDragOver ? 'var(--ink)' : 'var(--rule)'}`,
+                padding: '2rem 1.25rem',
+                textAlign: 'center',
+                background: isDragOver ? '#FFFFFF' : 'var(--paper)',
+                transition: 'border-color 0.15s, background 0.15s',
+              }}
+              onDragOver={e => {
+                e.preventDefault();
+                if (!disabled) setIsDragOver(true);
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={e => {
+                e.preventDefault();
+                setIsDragOver(false);
+                if (disabled) return;
+                acceptFile(e.dataTransfer.files?.[0] || null);
+              }}
+            >
+              <Upload size={22} color="var(--ink-soft)" style={{ margin: '0 auto 0.5rem' }} />
+              <input type="file" accept=".pdf" disabled={disabled} onChange={e => acceptFile(e.target.files?.[0] || null)} style={{ display: 'none' }} id="file-upload" />
+              <label htmlFor="file-upload" style={{ cursor: disabled ? 'default' : 'pointer', color: 'var(--ink)', fontWeight: 600, fontSize: '0.9375rem' }}>
+                {file ? file.name : 'Drop a PDF here, or click to upload'}
+              </label>
+            </div>
+          ) : (
             <textarea
               className="form-textarea"
-              rows={7}
+              rows={9}
               value={studentAnswerText}
               disabled={disabled}
               onChange={e => setStudentAnswerText(e.target.value)}
               placeholder="Paste student answer text here..."
-              style={{ marginTop: '0.75rem' }}
+              autoFocus
             />
           )}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '1rem', marginTop: '1.5rem' }}>
+          {!disabled && disabledReason && <span style={{ fontSize: '0.8125rem', color: 'var(--ink-soft)', fontStyle: 'italic' }}>{disabledReason}</span>}
           <button
             type="submit"
             className="btn btn-primary"
             disabled={!canSubmit || disabled}
-            title={disabled ? 'Grading in progress...' : disabledReason || undefined}
-            style={{ minWidth: 180, opacity: canSubmit && !disabled ? 1 : 0.6, cursor: canSubmit && !disabled ? 'pointer' : 'not-allowed' }}
+            style={{ minWidth: 180, flexShrink: 0, opacity: canSubmit && !disabled ? 1 : 0.6, cursor: canSubmit && !disabled ? 'pointer' : 'not-allowed' }}
           >
             {disabled ? 'Grading...' : 'Grade This Paper →'}
           </button>
