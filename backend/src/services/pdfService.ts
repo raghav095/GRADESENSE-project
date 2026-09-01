@@ -12,16 +12,51 @@ import { computeTextLayout, pageCount, PAGE_WIDTH, PAGE_HEIGHT, MARGIN_X, MARGIN
 // confirmed by testing it against this app's own exported PDFs, which it
 // couldn't re-read. pdfjs-dist is the actively maintained engine and parses
 // the same files correctly.
-export async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
+export interface PdfExtraction {
+  text: string;
+  pageCount: number;
+}
+
+// Returns pageCount alongside the extracted text so a caller can tell a
+// genuinely short answer apart from a PDF that mostly isn't text at all — a
+// scanned/photographed answer sheet or a hand-drawn diagram has real content
+// on the page, but pdfjs's getTextContent() only ever sees rendered text
+// runs, never pixels. A one-page PDF that yields only a few dozen characters
+// is a signal worth surfacing, not silently treating as "the student wrote
+// almost nothing."
+export async function extractTextFromPdf(pdfBuffer: Buffer): Promise<PdfExtraction> {
   try {
     const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBuffer), useSystemFonts: true }).promise;
     const pageTexts: string[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      pageTexts.push(content.items.map((item: any) => ('str' in item ? item.str : '')).join(' '));
+
+      // Grouped into visual lines by each item's baseline Y position (pdfjs
+      // gives every item a transform matrix; transform[5] is its Y) instead
+      // of concatenating every item on the page with a single space —
+      // joining everything flat collapsed distinct lines (e.g. a "Name:"
+      // header above the actual answer) into one run-on blob with no
+      // boundary between them, which breaks anything that looks for a
+      // line-anchored pattern in the extracted text, not just readability.
+      const items = (content.items as any[]).filter(item => 'str' in item && typeof item.transform?.[5] === 'number');
+      const lineGroups = new Map<number, { x: number; str: string }[]>();
+      for (const item of items) {
+        const y = Math.round(item.transform[5]);
+        if (!lineGroups.has(y)) lineGroups.set(y, []);
+        lineGroups.get(y)!.push({ x: item.transform[4], str: item.str });
+      }
+      const lines = Array.from(lineGroups.entries())
+        .sort((a, b) => b[0] - a[0]) // top to bottom — higher PDF-space Y first
+        .map(([, lineItems]) =>
+          lineItems
+            .sort((a, b) => a.x - b.x)
+            .map(li => li.str)
+            .join(' ')
+        );
+      pageTexts.push(lines.join('\n'));
     }
-    return pageTexts.join('\n\n').trim();
+    return { text: pageTexts.join('\n\n').trim(), pageCount: doc.numPages };
   } catch (err: any) {
     throw new Error(`Failed to extract text from PDF: ${err.message}`);
   }

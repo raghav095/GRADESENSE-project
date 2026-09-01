@@ -27,6 +27,11 @@ export interface Submission {
   studentAnswerFilePath?: string;
   sourceType: 'pasted' | 'pdf';
   createdAt: string;
+  /** Set when a PDF upload yielded suspiciously little extractable text for
+   * its page count — likely a scanned image, handwriting, or a diagram that
+   * pdfjs's text-only extraction can't read — so grading flags the result
+   * for human review instead of silently grading a fragment as complete. */
+  extractionNote?: string;
 }
 
 export interface RubricPointResult {

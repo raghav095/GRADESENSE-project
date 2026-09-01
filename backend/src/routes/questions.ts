@@ -111,7 +111,7 @@ router.post('/draft', draftUpload.single('file'), async (req, res) => {
     if (req.file) {
       try {
         const extracted = await extractTextFromPdf(req.file.buffer);
-        if (extracted.trim()) questionText = extracted.trim();
+        if (extracted.text) questionText = extracted.text;
       } catch (err: any) {
         return res.status(400).json({ error: `Could not read the uploaded PDF: ${err.message}` });
       }

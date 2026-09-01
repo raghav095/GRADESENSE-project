@@ -56,6 +56,7 @@ export function initializeDatabase(dbPath?: string): Database.Database {
       student_answer_text TEXT NOT NULL,
       student_answer_file_path TEXT,
       source_type TEXT NOT NULL,
+      extraction_note TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY (question_id) REFERENCES questions(id)
     );
@@ -142,6 +143,7 @@ function migrateAddedColumns(db: Database.Database) {
   addColumnIfMissing('rubric_point_results', 'evidence_end', 'INTEGER');
   addColumnIfMissing('grading_results', 'reviewed_at', 'TEXT');
   addColumnIfMissing('questions', 'model_answer_text', 'TEXT');
+  addColumnIfMissing('submissions', 'extraction_note', 'TEXT');
 }
 
 // A database seeded before model_answer_text existed has that column as NULL

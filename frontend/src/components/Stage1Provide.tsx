@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Question, GradingResult } from '../types';
 import { ChevronRight, ChevronDown, Upload, Plus, FileText, Type } from 'lucide-react';
 import { AddQuestionForm } from './AddQuestionForm';
+import { readJson } from '../utils/api';
 
 interface Stage1ProvideProps {
   questions: Question[];
@@ -112,24 +113,29 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
   const runGrading = async () => {
     const formData = new FormData();
     formData.append('questionId', selectedQuestionId);
-    formData.append('studentName', studentName || 'Anonymous Student');
-    formData.append('rollNumber', rollNumber || '00');
+    // Left blank (rather than defaulting to 'Anonymous Student'/'00' here)
+    // when the teacher didn't type one — that lets the backend fall back to
+    // a name/roll it finds on the uploaded PDF itself before giving up and
+    // using those defaults, instead of the typed-blank default always
+    // winning over it.
+    if (studentName.trim()) formData.append('studentName', studentName.trim());
+    if (rollNumber.trim()) formData.append('rollNumber', rollNumber.trim());
     formData.append('studentAnswerText', studentAnswerText);
     if (file) formData.append('file', file);
 
     const subRes = await fetch('/api/submissions', { method: 'POST', body: formData });
     if (!subRes.ok) {
-      const errJson = await subRes.json();
+      const errJson = await readJson(subRes);
       throw new Error(errJson.error || 'Failed to upload submission');
     }
-    const submission = await subRes.json();
+    const submission = await readJson(subRes);
 
     const gradeRes = await fetch(`/api/submissions/${submission.id}/grade`, { method: 'POST' });
     if (!gradeRes.ok) {
-      const errJson = await gradeRes.json();
+      const errJson = await readJson(gradeRes);
       throw new Error(errJson.error || 'Failed during grading execution');
     }
-    return (await gradeRes.json()) as GradingResult;
+    return (await readJson(gradeRes)) as GradingResult;
   };
 
   const handleSubmit = (e: React.FormEvent) => {

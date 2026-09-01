@@ -7,6 +7,7 @@ import { getDb } from '../db/index.js';
 import { extractTextFromPdf } from '../services/pdfService.js';
 import { runGradingPipeline } from '../services/gradingPipeline.js';
 import { toPublicFileUrl } from '../services/fileUrl.js';
+import { extractStudentMeta } from '../services/studentMeta.js';
 import { Submission } from '../services/types.js';
 
 const router = Router();
@@ -41,14 +42,33 @@ router.post('/', upload.single('file'), async (req, res) => {
     let finalAnswerText = studentAnswerText || '';
     let filePath: string | undefined = undefined;
     let sourceType: 'pasted' | 'pdf' = 'pasted';
+    let finalStudentName = (studentName || '').trim();
+    let finalRollNumber = (rollNumber || '').trim();
+    let extractionNote: string | undefined;
 
     if (req.file) {
       filePath = req.file.path;
       sourceType = 'pdf';
       const fileBuffer = fs.readFileSync(filePath);
-      const pdfText = await extractTextFromPdf(fileBuffer);
-      if (pdfText.trim()) {
+      const { text: pdfText, pageCount } = await extractTextFromPdf(fileBuffer);
+      if (pdfText) {
         finalAnswerText = pdfText;
+
+        // Fill in name/roll from the page itself only when the teacher left
+        // the field blank — an explicitly typed value always wins.
+        const meta = extractStudentMeta(pdfText);
+        if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
+        if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
+      }
+
+      // A one-page PDF that yields under ~40 characters of extractable text
+      // usually means the page is mostly a scanned image, handwriting, or a
+      // diagram — pdfjs's text-only extraction can't read pixels. Flagging
+      // this distinctly means a near-empty extraction reads as "verify the
+      // original file," not as "the student wrote almost nothing."
+      if (pageCount > 0 && pdfText.length < pageCount * 40) {
+        extractionNote =
+          'This PDF yielded very little extractable text relative to its page count — it may contain a scanned image, handwriting, or a diagram that this system cannot read as text. Check the original uploaded file before trusting this score.';
       }
     }
 
@@ -57,29 +77,31 @@ router.post('/', upload.single('file'), async (req, res) => {
     const now = new Date().toISOString();
 
     const insertSub = db.prepare(`
-      INSERT INTO submissions (id, question_id, student_name, roll_number, student_answer_text, student_answer_file_path, source_type, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO submissions (id, question_id, student_name, roll_number, student_answer_text, student_answer_file_path, source_type, extraction_note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     insertSub.run(
       subId,
       questionId,
-      studentName || 'Anonymous Student',
-      rollNumber || '00',
+      finalStudentName || 'Anonymous Student',
+      finalRollNumber || '00',
       finalAnswerText,
       filePath || null,
       sourceType,
+      extractionNote || null,
       now
     );
 
     const submission: Submission = {
       id: subId,
       questionId,
-      studentName: studentName || 'Anonymous Student',
-      rollNumber: rollNumber || '00',
+      studentName: finalStudentName || 'Anonymous Student',
+      rollNumber: finalRollNumber || '00',
       studentAnswerText: finalAnswerText,
       studentAnswerFilePath: filePath,
       sourceType,
+      extractionNote,
       createdAt: now,
     };
 
@@ -105,6 +127,7 @@ router.post('/:id/grade', async (req, res) => {
       studentAnswerText: sub.student_answer_text,
       studentAnswerFilePath: sub.student_answer_file_path || undefined,
       sourceType: sub.source_type,
+      extractionNote: sub.extraction_note || undefined,
       createdAt: sub.created_at,
     };
 
