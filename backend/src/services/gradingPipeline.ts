@@ -307,23 +307,30 @@ export async function runGradingPipeline(
 
   // Step 4.5: Best-effort vision assessment for diagram/figure criteria —
   // only attempted when the primary grader actually has vision capability
-  // (a real GeminiGrader with working credentials) and the original upload
-  // is a rasterizable PDF (DOCX rasterization isn't built — those criteria
-  // still fall back to the honest review flag below). On ANY failure (no
-  // credentials, a missing native rendering dependency in whatever
-  // environment this runs in, a malformed response) this silently does
-  // nothing and every diagram criterion keeps behaving exactly as before —
-  // this can only ever add a real check on top of that, never regress it.
+  // (a real GeminiGrader with working credentials) and there's an actual
+  // image to look at: either a rasterizable PDF (DOCX rasterization isn't
+  // built — those criteria still fall back to the honest review flag below)
+  // or a directly-uploaded photo/scan (sourceType 'image'), which needs no
+  // rasterization at all — the uploaded file already IS the page image.
+  // This is exactly the "hand-drawn diagram in a photographed answer" case.
+  // On ANY failure (no credentials, a missing native rendering dependency,
+  // a malformed response) this silently does nothing and every diagram
+  // criterion keeps behaving exactly as before — this can only ever add a
+  // real check on top of that, never regress it.
   const visuallyAssessedRubricPointIds = new Set<string>();
-  if (isVisualEvidenceBlind && primaryGrader instanceof GeminiGrader && submission.studentAnswerFilePath?.toLowerCase().endsWith('.pdf')) {
+  const canAttemptVisualAssessment =
+    isVisualEvidenceBlind &&
+    primaryGrader instanceof GeminiGrader &&
+    (submission.studentAnswerFilePath?.toLowerCase().endsWith('.pdf') || submission.sourceType === 'image');
+  if (canAttemptVisualAssessment) {
     try {
       const visualTargets = pointResults
         .map((pr, idx) => ({ pr, idx, rp: rubricPoints.find(r => r.id === pr.rubricPointId) }))
         .filter((t): t is { pr: RubricPointResult; idx: number; rp: RubricPoint } => Boolean(t.rp) && visualCriterionPattern.test(t.rp!.criterion));
 
       if (visualTargets.length > 0) {
-        const fileBuffer = fs.readFileSync(submission.studentAnswerFilePath);
-        const pageImages = await renderPdfPagesToImages(fileBuffer);
+        const fileBuffer = fs.readFileSync(submission.studentAnswerFilePath!);
+        const pageImages = submission.sourceType === 'image' ? [fileBuffer] : await renderPdfPagesToImages(fileBuffer);
 
         if (pageImages.length > 0) {
           const assessments = await Promise.all(

@@ -245,12 +245,15 @@ ${strictSuffix}`;
   async transcribeHandwriting(pageImages: Buffer[]): Promise<string | null> {
     if (!this.ai || pageImages.length === 0) return null;
 
-    const prompt = `Transcribe all the handwritten (or otherwise non-selectable) text visible in the following image(s) into plain text, as accurately as possible.
+    const prompt = `You are transcribing a real student's handwritten answer sheet, photographed or scanned. Handwriting varies enormously between students — cursive, print, slanted, mixed styles, uneven spacing, faint pencil, or a pen that's smudged or bled through the page. Read carefully and patiently, the way an experienced teacher would when marking papers, rather than expecting clean printed text.
 
 Rules:
-- Preserve paragraph breaks with a blank line between paragraphs.
-- If a word or phrase is genuinely illegible, write [illegible] in its place rather than guessing.
-- Transcribe only what is actually written — do not summarize, correct spelling, or complete sentences on the student's behalf.
+- Preserve paragraph breaks with a blank line between paragraphs, and keep the student's original line breaks where they clearly mark separate points (e.g. numbered or bulleted answers).
+- Use surrounding context (the sentence, the subject of the question) to resolve an ambiguous letter or word — the same way a person would — rather than giving up at the first hint of messiness.
+- If a word is crossed out or struck through, skip it — it's not the student's final answer. If a word is written above/beside another as a correction, transcribe the correction, not the original.
+- If a word or phrase is genuinely illegible after careful reading, write [illegible] in its place rather than guessing or inventing text that isn't there.
+- Transcribe only what is actually written — do not summarize, correct spelling or grammar, or complete sentences on the student's behalf.
+- If part of the image is a diagram, sketch, or drawing rather than text, ignore it here — it is handled separately. Only transcribe words and sentences.
 - If the image contains no handwritten or printed text at all (e.g. it's blank, or purely a diagram with no words), return an empty string.
 
 Return ONLY the transcribed text — no commentary, no markdown, no preamble.`;
@@ -303,7 +306,7 @@ ${questionContext}
 CRITERION TO ASSESS (worth ${maxMarks} mark(s)):
 ${criterion}
 
-Look at the image(s) and decide whether the criterion is satisfied. Be strict — only mark it satisfied if the diagram genuinely and clearly meets the criterion as described. If there is no diagram at all in the image(s), it is not satisfied.
+Look at the image(s) and decide whether the criterion is satisfied. The diagram may be hand-drawn on a photographed or scanned answer sheet — judge it on substance (correct shape, correct labels, correct connections/relationships) the way a teacher would, not on neatness or ruler-straight lines; rough freehand sketching is completely normal for handwritten schoolwork and is not itself a reason to fail the criterion. Be strict about substance — only mark it satisfied if the diagram genuinely and clearly meets the criterion as described. If there is no diagram at all in the image(s), it is not satisfied.
 
 Return ONLY a JSON object (no markdown fences, no prose):
 {

@@ -38,14 +38,18 @@ export async function renderPdfPagesToImages(pdfBuffer: Buffer, maxPages = 3): P
 
   try {
     fs.writeFileSync(pdfPath, pdfBuffer);
-    await execFileAsync('pdftoppm', ['-png', '-r', '150', '-f', '1', '-l', String(maxPages), pdfPath, outPrefix]);
+    // 220 DPI rather than 150: a typed diagram reads fine at 150, but a
+    // scanned/photographed page of handwriting needs the extra pixel density
+    // for a vision model to make out individual letterforms reliably.
+    await execFileAsync('pdftoppm', ['-png', '-r', '220', '-f', '1', '-l', String(maxPages), pdfPath, outPrefix]);
 
     const files = fs
       .readdirSync(tmpDir)
       .filter(f => f.startsWith('page') && f.endsWith('.png'))
       .sort();
     return files.map(f => fs.readFileSync(path.join(tmpDir, f)));
-  } catch {
+  } catch (err: any) {
+    console.error('renderPdfPagesToImages failed (pdftoppm missing or errored):', err?.message || err);
     return [];
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
