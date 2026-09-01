@@ -9,7 +9,17 @@ import annotationsRouter from './routes/annotations.js';
 import { initializeDatabase } from './db/schema.js';
 import { getDb } from './db/index.js';
 
-dotenv.config();
+// dotenv.config() with no path only looks in process.cwd() — but that's
+// always backend/ here (whether started via `cd backend && npm run dev` or
+// the root `npm run dev:backend` script), while .env lives at the project
+// root, one level up. The bare call silently never found it: USE_LLM and
+// GOOGLE_APPLICATION_CREDENTIALS were undefined every single run regardless
+// of what .env actually said, so grading silently ran through MockGrader the
+// entire time even with real credentials configured. Resolving the path
+// relative to this file itself (via the CommonJS __dirname global — this
+// compiles to CJS, not ESM, so import.meta isn't available here) fixes it
+// regardless of how or from where the server is launched.
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
