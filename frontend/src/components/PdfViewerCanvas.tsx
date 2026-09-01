@@ -21,7 +21,14 @@ function escapeHtml(s: string): string {
 // mistake is. WHY it's wrong, how many marks it cost, and the editable
 // correction note all live in RubricSidebar — one authoritative place,
 // instead of being repeated here too.
-type PaperTab = 'student' | 'model';
+type PaperTab = 'student' | 'model' | 'original';
+
+function fileKindOf(url: string): 'image' | 'pdf' | 'other' {
+  const lower = url.toLowerCase();
+  if (/\.(png|jpe?g)$/.test(lower)) return 'image';
+  if (/\.pdf$/.test(lower)) return 'pdf';
+  return 'other';
+}
 
 export const PdfViewerCanvas: React.FC<PdfViewerCanvasProps> = ({ result, selectedRubricPointId, onSelectRubricPoint }) => {
   const [tab, setTab] = useState<PaperTab>('student');
@@ -139,22 +146,41 @@ export const PdfViewerCanvas: React.FC<PdfViewerCanvasProps> = ({ result, select
               Model Answer
             </button>
           )}
+          {result.originalFileUrl && (
+            <button
+              onClick={() => setTab('original')}
+              style={{
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                fontSize: '0.8125rem',
+                fontWeight: tab === 'original' ? 700 : 500,
+                color: tab === 'original' ? 'var(--ink)' : 'var(--ink-soft)',
+                borderBottom: tab === 'original' ? '2px solid var(--red-pen)' : '2px solid transparent',
+                paddingBottom: '0.25rem',
+              }}
+              title="The actual file as uploaded — useful for a diagram or handwritten answer the text view can't show."
+            >
+              Original Upload
+            </button>
+          )}
         </div>
 
-        {result.originalFileUrl && (
+        {result.originalFileUrl && tab !== 'original' && (
           <a
             href={result.originalFileUrl}
             target="_blank"
             rel="noreferrer"
             style={{ fontSize: '0.75rem', color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', gap: 4 }}
-            title="Opens the original uploaded file exactly as submitted — including any diagrams or images, which the text-based grading pipeline doesn't see."
+            title="Opens the original uploaded file in a new tab, full size."
           >
-            <ExternalLink size={12} /> View Original Uploaded File
+            <ExternalLink size={12} /> Open in new tab
           </a>
         )}
       </div>
 
-      {tab === 'student' ? (
+      {tab === 'student' && (
         <div className="pdf-paper-sheet">
           <div style={{ borderBottom: '1px solid var(--rule)', paddingBottom: '0.75rem', marginBottom: '1.25rem', display: 'flex', justifyContent: 'space-between' }}>
             <div>
@@ -175,7 +201,9 @@ export const PdfViewerCanvas: React.FC<PdfViewerCanvasProps> = ({ result, select
 
           {renderAnnotatedText()}
         </div>
-      ) : (
+      )}
+
+      {tab === 'model' && (
         <div className="pdf-paper-sheet" style={{ borderLeft: '3px solid var(--marks-good)' }}>
           <div style={{ borderBottom: '1px solid var(--rule)', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
             <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.125rem', fontWeight: 600 }}>Model Answer — Reference</div>
@@ -185,6 +213,31 @@ export const PdfViewerCanvas: React.FC<PdfViewerCanvasProps> = ({ result, select
           </div>
           <div style={{ fontFamily: 'var(--font-serif)', fontWeight: 600, fontSize: '1rem', marginBottom: '0.875rem', color: 'var(--ink)' }}>{result.questionTitle}</div>
           <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8, fontSize: '0.9375rem', color: 'var(--ink)' }}>{result.modelAnswerText}</div>
+        </div>
+      )}
+
+      {tab === 'original' && result.originalFileUrl && (
+        <div className="pdf-paper-sheet" style={{ borderLeft: '3px solid var(--red-pen)', padding: '1.5rem' }}>
+          <div style={{ borderBottom: '1px solid var(--rule)', paddingBottom: '0.75rem', marginBottom: '1.25rem' }}>
+            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.125rem', fontWeight: 600 }}>Original Uploaded File</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--ink-soft)', marginTop: '0.25rem' }}>
+              Exactly as submitted — the source for anything the text view above can't show, like a diagram or handwritten answer.
+            </div>
+          </div>
+          {(() => {
+            const kind = fileKindOf(result.originalFileUrl);
+            if (kind === 'image') {
+              return <img src={result.originalFileUrl} alt="Original uploaded answer" style={{ maxWidth: '100%', display: 'block', margin: '0 auto' }} />;
+            }
+            if (kind === 'pdf') {
+              return <iframe src={result.originalFileUrl} title="Original uploaded PDF" style={{ width: '100%', height: '75vh', border: '1px solid var(--rule)' }} />;
+            }
+            return (
+              <a href={result.originalFileUrl} target="_blank" rel="noreferrer" style={{ color: 'var(--ink)', textDecoration: 'underline' }}>
+                Open the original file
+              </a>
+            );
+          })()}
         </div>
       )}
     </div>
