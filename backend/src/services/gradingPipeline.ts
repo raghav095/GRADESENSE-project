@@ -130,6 +130,15 @@ export async function runGradingPipeline(
   const trimmedText = submission.studentAnswerText.trim();
 
   // Step 1: Short-circuit for blank answers — deterministic, no API call.
+  //
+  // An empty studentAnswerText has two very different possible causes, and
+  // they must NOT be reported the same way: a genuinely blank submission is
+  // confidently 0 (the student wrote nothing) — but if extractionNote is
+  // set, the text is empty because we *couldn't read* the upload (e.g. a
+  // photo/scan where AI transcription failed or wasn't available), which is
+  // uncertainty, not a confident zero. Reporting the second case as
+  // "1.0 confidence, no review needed" would be exactly the "pretending to
+  // be correct" the reliability rule forbids.
   if (!trimmedText) {
     const pointResults: RubricPointResult[] = rubricPoints.map(r => ({
       id: `pr-${crypto.randomUUID()}`,
@@ -142,7 +151,7 @@ export async function runGradingPipeline(
       evidenceMatched: false,
       evidenceStart: null,
       evidenceEnd: null,
-      feedback: 'No response submitted.',
+      feedback: submission.extractionNote ? 'Could not be evaluated — see the review reason.' : 'No response submitted.',
     }));
 
     const result: GradingResult = {
@@ -150,9 +159,9 @@ export async function runGradingPipeline(
       submissionId: submission.id,
       totalMarks: 0,
       maxMarks: question.maxMarks,
-      confidence: 1.0,
-      needsHumanReview: false,
-      reviewReason: undefined,
+      confidence: submission.extractionNote ? 0.3 : 1.0,
+      needsHumanReview: Boolean(submission.extractionNote),
+      reviewReason: submission.extractionNote,
       status: 'complete',
       createdAt: now,
       pointResults,

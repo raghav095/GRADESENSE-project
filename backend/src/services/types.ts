@@ -25,7 +25,7 @@ export interface Submission {
   rollNumber: string;
   studentAnswerText: string;
   studentAnswerFilePath?: string;
-  sourceType: 'pasted' | 'pdf' | 'docx';
+  sourceType: 'pasted' | 'pdf' | 'docx' | 'image';
   createdAt: string;
   /** Set when a PDF upload yielded suspiciously little extractable text for
    * its page count — likely a scanned image, handwriting, or a diagram that

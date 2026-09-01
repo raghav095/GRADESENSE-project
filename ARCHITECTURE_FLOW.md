@@ -35,7 +35,7 @@ Gradesense/
 │   │   │   ├── gradingPipeline.ts   # Core pipeline: retry/schema-validation, clamping invariants, fuzzy quote matcher
 │   │   │   │                        #   with real character offsets, verification, confidence, annotation placement
 │   │   │   ├── mockGrader.ts        # Zero-dependency deterministic grader with fixture-based verification rule evaluation
-│   │   │   ├── geminiGrader.ts      # Live Google Gemini / Vertex AI SDK grader (@google/genai) + GraderCallError
+│   │   │   ├── geminiGrader.ts      # Live Gemini/Vertex grader + GraderCallError; also vision assessment (diagrams) and handwriting transcription
 │   │   │   ├── pdfService.ts        # pdfjs-dist text extraction + pdf-lib canonical PDF renderer/annotation exporter
 │   │   │   ├── docxService.ts       # mammoth DOCX text extraction (question papers and student answers, alongside PDF)
 │   │   │   ├── studentMeta.ts       # Regex fallback-fill of student name/roll from a "Name:"/"Roll No:" line in the upload

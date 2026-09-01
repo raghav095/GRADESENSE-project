@@ -219,6 +219,51 @@ ${strictSuffix}`;
   }
 
   /**
+   * Transcribes handwritten or otherwise non-extractable text from page
+   * image(s) — for a scanned or photographed answer sheet, where pdfjs's
+   * text-layer extraction finds nothing because there IS no text layer,
+   * only pixels. A best-effort enhancement: on any failure (no credentials,
+   * empty/garbled response) this returns null, and the caller falls back to
+   * the existing honest behavior — flagging the near-empty extraction for
+   * human review — exactly as it did before this existed. This is never
+   * treated as a replacement for that review flag when it succeeds, either:
+   * AI-transcribed handwriting is inherently less certain than a real text
+   * layer, so the caller still asks a human to verify it against the
+   * original file.
+   */
+  async transcribeHandwriting(pageImages: Buffer[]): Promise<string | null> {
+    if (!this.ai || pageImages.length === 0) return null;
+
+    const prompt = `Transcribe all the handwritten (or otherwise non-selectable) text visible in the following image(s) into plain text, as accurately as possible.
+
+Rules:
+- Preserve paragraph breaks with a blank line between paragraphs.
+- If a word or phrase is genuinely illegible, write [illegible] in its place rather than guessing.
+- Transcribe only what is actually written — do not summarize, correct spelling, or complete sentences on the student's behalf.
+- If the image contains no handwritten or printed text at all (e.g. it's blank, or purely a diagram with no words), return an empty string.
+
+Return ONLY the transcribed text — no commentary, no markdown, no preamble.`;
+
+    try {
+      const parts: any[] = [{ text: prompt }];
+      for (const img of pageImages) {
+        parts.push({ inlineData: { mimeType: 'image/png', data: img.toString('base64') } });
+      }
+
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents: [{ role: 'user', parts }],
+        config: { temperature: 0.1 },
+      });
+
+      const text = (response.text || '').trim();
+      return text || null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Assesses ONE rubric criterion that depends on a diagram/figure, using
    * the actual rendered page image(s) instead of extracted text — the only
    * way this pipeline can ever have a real opinion about something visual,

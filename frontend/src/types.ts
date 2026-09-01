@@ -56,7 +56,7 @@ export interface GradingResult {
   studentAnswerText: string;
   /** Public URL to the originally uploaded file (null if the answer was pasted text) — the grading pipeline only ever sees extracted text, so any diagram/image in an uploaded PDF is otherwise invisible; this lets a teacher open the real file directly. */
   originalFileUrl?: string | null;
-  sourceType: 'pasted' | 'pdf' | 'docx';
+  sourceType: 'pasted' | 'pdf' | 'docx' | 'image';
   questionId: string;
   questionTitle: string;
   questionText: string;

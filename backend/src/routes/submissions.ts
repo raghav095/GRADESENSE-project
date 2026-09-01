@@ -6,17 +6,22 @@ import crypto from 'crypto';
 import { getDb } from '../db/index.js';
 import { extractTextFromPdf } from '../services/pdfService.js';
 import { extractTextFromDocx } from '../services/docxService.js';
+import { renderPdfPagesToImages } from '../services/pdfRasterize.js';
+import { GeminiGrader } from '../services/geminiGrader.js';
 import { runGradingPipeline } from '../services/gradingPipeline.js';
 import { toPublicFileUrl } from '../services/fileUrl.js';
 import { extractStudentMeta } from '../services/studentMeta.js';
 import { Submission } from '../services/types.js';
 
-// Only formats this pipeline can actually turn into text. Images (PNG/JPG)
-// are deliberately not supported — there's no OCR here, so an image upload
-// would silently produce zero extractable text and grade as a blank answer,
-// which is worse than telling the teacher up front to paste the text or
-// upload a PDF/DOCX instead.
-const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx']);
+// A photographed or scanned answer sheet (PNG/JPG) has no text layer at
+// all — there's nothing for pdfjs-style extraction to find. These are
+// accepted and routed straight to Gemini vision transcription instead
+// (GeminiGrader.transcribeHandwriting) — the real "student wrote it by hand,
+// took a photo, uploaded it" workflow. If no live Gemini credentials are
+// configured, this fails gracefully (see below) rather than silently
+// grading an empty answer as if it were confidently blank.
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
+const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.png', '.jpg', '.jpeg']);
 
 const router = Router();
 
@@ -49,7 +54,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     let finalAnswerText = studentAnswerText || '';
     let filePath: string | undefined = undefined;
-    let sourceType: 'pasted' | 'pdf' | 'docx' = 'pasted';
+    let sourceType: 'pasted' | 'pdf' | 'docx' | 'image' = 'pasted';
     let finalStudentName = (studentName || '').trim();
     let finalRollNumber = (rollNumber || '').trim();
     let extractionNote: string | undefined;
@@ -59,44 +64,101 @@ router.post('/', upload.single('file'), async (req, res) => {
       if (!SUPPORTED_EXTENSIONS.has(ext)) {
         fs.unlinkSync(req.file.path); // uploaded but never going to be used — don't leave it on disk
         return res.status(400).json({
-          error: `Unsupported file type "${ext || 'unknown'}" — upload a PDF or DOCX file, or use "Paste Text" instead. Image files (PNG/JPG) can't be read as text by this system.`,
+          error: `Unsupported file type "${ext || 'unknown'}" — upload a PDF, DOCX, PNG, or JPG file, or use "Paste Text" instead.`,
         });
       }
 
       filePath = req.file.path;
-      sourceType = ext === '.docx' ? 'docx' : 'pdf';
+      sourceType = IMAGE_EXTENSIONS.has(ext) ? 'image' : ext === '.docx' ? 'docx' : 'pdf';
       const fileBuffer = fs.readFileSync(filePath);
 
-      let extractedText = '';
-      let pageCount = 1; // DOCX has no page concept here — treated as a single "page" for the length heuristic below
-
-      if (sourceType === 'docx') {
-        extractedText = await extractTextFromDocx(fileBuffer);
+      if (sourceType === 'image') {
+        // A photographed/scanned answer sheet — no text layer exists at
+        // all, so this always goes straight to vision transcription (the
+        // uploaded image IS the page; no rasterization step needed).
+        const transcribed = await new GeminiGrader().transcribeHandwriting([fileBuffer]);
+        if (transcribed) {
+          finalAnswerText = transcribed;
+          const meta = extractStudentMeta(transcribed);
+          if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
+          if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
+          extractionNote =
+            'This image was transcribed using AI — likely a photographed or handwritten answer sheet, with no machine-readable text to cross-check it against. AI transcription of handwriting is not always fully accurate. Check the original uploaded file before trusting this score.';
+        } else {
+          // Could not read it at all. This must NOT be treated as a
+          // confident blank answer further down the pipeline — the student
+          // may have written a full page that simply couldn't be read
+          // (no live Gemini credentials configured, or the call failed) —
+          // so it's flagged distinctly rather than silently scored 0/100%.
+          extractionNote =
+            'This image could not be read — either AI vision transcription is not configured (no live Gemini credentials) or the attempt failed. This is NOT a confident blank; check the original uploaded file directly before trusting any score here.';
+        }
       } else {
-        const pdfResult = await extractTextFromPdf(fileBuffer);
-        extractedText = pdfResult.text;
-        pageCount = pdfResult.pageCount;
-      }
+        let extractedText = '';
+        let pageCount = 1; // DOCX has no page concept here — treated as a single "page" for the length heuristic below
 
-      if (extractedText) {
-        finalAnswerText = extractedText;
+        if (sourceType === 'docx') {
+          extractedText = await extractTextFromDocx(fileBuffer);
+        } else {
+          const pdfResult = await extractTextFromPdf(fileBuffer);
+          extractedText = pdfResult.text;
+          pageCount = pdfResult.pageCount;
+        }
 
-        // Fill in name/roll from the page itself only when the teacher left
-        // the field blank — an explicitly typed value always wins.
-        const meta = extractStudentMeta(extractedText);
-        if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
-        if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
-      }
+        if (extractedText) {
+          finalAnswerText = extractedText;
 
-      // A one-page PDF (or any DOCX) that yields under ~40 characters of
-      // extractable text usually means the page is mostly a scanned image,
-      // handwriting, or a diagram — text extraction can't read pixels.
-      // Flagging this distinctly means a near-empty extraction reads as
-      // "verify the original file," not as "the student wrote almost nothing."
-      if (extractedText.length < pageCount * 40) {
-        extractionNote = `This ${sourceType === 'docx' ? 'DOCX' : 'PDF'} yielded very little extractable text${
-          sourceType === 'pdf' ? ' relative to its page count' : ''
-        } — it may contain a scanned image, handwriting, or a diagram that this system cannot read as text. Check the original uploaded file before trusting this score.`;
+          // Fill in name/roll from the page itself only when the teacher left
+          // the field blank — an explicitly typed value always wins.
+          const meta = extractStudentMeta(extractedText);
+          if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
+          if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
+        }
+
+        // A one-page PDF (or any DOCX) that yields under ~40 characters of
+        // extractable text usually means the page is mostly a scanned image,
+        // handwriting, or a diagram — pdfjs's text-layer extraction can't
+        // read pixels, only an actual embedded text layer.
+        const looksLikeLowText = extractedText.length < pageCount * 40;
+
+        // For a PDF specifically (rasterization isn't built for DOCX), attempt
+        // to actually read it via Gemini vision instead of only flagging it —
+        // this is the scanned/photographed handwritten answer sheet case,
+        // just arriving as a PDF instead of a raw image. Best-effort:
+        // silently does nothing if poppler isn't installed or no live
+        // credentials are configured, falling through to the existing
+        // honest review-flag note below either way. AI transcription of
+        // handwriting is never treated as fully trustworthy on its own —
+        // when it succeeds, the note below still asks a human to verify it.
+        if (looksLikeLowText && sourceType === 'pdf') {
+          try {
+            const pageImages = await renderPdfPagesToImages(fileBuffer);
+            if (pageImages.length > 0) {
+              const transcribed = await new GeminiGrader().transcribeHandwriting(pageImages);
+              if (transcribed && transcribed.length > extractedText.length) {
+                finalAnswerText = transcribed;
+                const meta = extractStudentMeta(transcribed);
+                if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
+                if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
+                extractionNote =
+                  'This PDF had almost no machine-readable text, so its content was transcribed from the page image using AI — likely a scanned or handwritten answer sheet. AI transcription of handwriting is not always fully accurate. Check the original uploaded file before trusting this score.';
+              }
+            }
+          } catch {
+            // Vision transcription unavailable or failed — falls through to
+            // the plain extraction-quality note below, unchanged.
+          }
+        }
+
+        // Flagging a plain near-empty extraction distinctly means it reads as
+        // "verify the original file," not as "the student wrote almost
+        // nothing" — only set if the vision fallback above didn't already
+        // produce a better note.
+        if (!extractionNote && looksLikeLowText) {
+          extractionNote = `This ${sourceType === 'docx' ? 'DOCX' : 'PDF'} yielded very little extractable text${
+            sourceType === 'pdf' ? ' relative to its page count' : ''
+          } — it may contain a scanned image, handwriting, or a diagram that this system cannot read as text. Check the original uploaded file before trusting this score.`;
+        }
       }
     }
 

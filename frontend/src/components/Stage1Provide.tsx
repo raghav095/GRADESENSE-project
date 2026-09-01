@@ -102,15 +102,10 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
       return;
     }
     const name = f.name.toLowerCase();
-    if (!name.endsWith('.pdf') && !name.endsWith('.docx')) {
+    if (!name.match(/\.(pdf|docx|png|jpe?g)$/)) {
       // Previously a silent no-op — dropping an unsupported file appeared to
-      // do nothing at all, with no indication why. No OCR exists here, so an
-      // image (PNG/JPG) is explicitly called out rather than just rejected.
-      setFileError(
-        name.match(/\.(png|jpe?g)$/)
-          ? "Image files aren't supported — this tool can't read text from a photo or scan. Upload a PDF or DOCX, or use \"Paste Text\" instead."
-          : 'Unsupported file type — upload a PDF or DOCX file, or use "Paste Text" instead.'
-      );
+      // do nothing at all, with no indication why.
+      setFileError('Unsupported file type — upload a PDF, DOCX, PNG, or JPG file, or use "Paste Text" instead.');
       return;
     }
     setFileError(null);
@@ -340,19 +335,23 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
                 <Upload size={22} color="var(--ink-soft)" />
                 <input
                   type="file"
-                  accept=".pdf,.docx"
+                  accept=".pdf,.docx,.png,.jpg,.jpeg"
                   disabled={disabled}
                   onChange={e => acceptFile(e.target.files?.[0] || null)}
                   style={{ display: 'none' }}
                   id="file-upload"
                 />
                 <span style={{ color: 'var(--ink)', fontWeight: 600, fontSize: '0.9375rem' }}>
-                  {file ? file.name : 'Drop a PDF or DOCX here, or click to upload'}
+                  {file ? file.name : 'Drop a PDF, DOCX, or a photo of a handwritten answer'}
                 </span>
               </div>
             </label>
-            {fileError && (
+            {fileError ? (
               <div style={{ marginTop: '0.5rem', fontSize: '0.8125rem', color: 'var(--red-pen)' }}>{fileError}</div>
+            ) : (
+              <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+                A photo of a handwritten answer is read using AI vision — always flagged for human review, since AI transcription of handwriting isn't guaranteed to be fully accurate.
+              </div>
             )}
             </>
           ) : (
