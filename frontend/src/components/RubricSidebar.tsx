@@ -238,22 +238,32 @@ export const RubricSidebar: React.FC<RubricSidebarProps> = ({
       <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--rule)', background: 'var(--paper)', margin: '1.25rem -1.25rem -1.25rem', padding: '1rem 1.25rem' }}>
         <div style={{ ...labelStyle, marginBottom: '0.25rem' }}>Teacher Notes</div>
         <div style={{ fontSize: '0.75rem', color: 'var(--ink-soft)', marginBottom: '0.75rem' }}>
-          Free-standing notes you add yourself — not tied to any rubric point or its marks.
+          Free-standing notes you add yourself — not tied to any rubric point or its marks. These appear on their own
+          "Teacher Notes" page in the exported PDF, separate from the rubric breakdown.
         </div>
 
-        {manualAnnotations.map(ann => (
-          <div key={ann.id} style={{ padding: '0.5rem 0', borderBottom: '1px solid var(--rule)' }}>
-            {renderEditableRow(ann.id, ann.correctionText, e => handleDelete(e, ann.id))}
+        {manualAnnotations.length > 0 && (
+          <div style={{ marginBottom: '0.5rem' }}>
+            {manualAnnotations.map(ann => (
+              <div key={ann.id} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--rule)' }}>
+                <div style={labelStyle}>Teacher Note</div>
+                <div style={{ marginTop: '0.3rem' }}>{renderEditableRow(ann.id, ann.correctionText, e => handleDelete(e, ann.id))}</div>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
 
-        <button
-          onClick={handleAddManualNote}
-          className="btn btn-secondary"
-          style={{ marginTop: '0.75rem', width: '100%', justifyContent: 'center', fontSize: '0.8125rem', padding: '0.4rem' }}
-        >
-          <Plus size={13} /> Add Manual Note
-        </button>
+        {/* Kept as its own clearly separate block from the notes above —
+            an action to add a new note, not a continuation of the last one. */}
+        <div style={{ marginTop: manualAnnotations.length > 0 ? '0.75rem' : 0 }}>
+          <button
+            onClick={handleAddManualNote}
+            className="btn btn-secondary"
+            style={{ width: '100%', justifyContent: 'center', fontSize: '0.8125rem', padding: '0.5rem' }}
+          >
+            <Plus size={13} /> Add Manual Note
+          </button>
+        </div>
       </div>
     </div>
   );

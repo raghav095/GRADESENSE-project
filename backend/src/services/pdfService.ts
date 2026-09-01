@@ -265,6 +265,19 @@ export async function exportAnnotatedPdf(
     });
   });
 
+  // Only rubric-linked annotations get drawn on the paper — their position
+  // came from actually locating the evidence quote in the student's text, so
+  // a box there is a true claim about where a mistake is. A free-standing
+  // "teacher note" (no linkedPointResultId) has no such anchor — there is no
+  // in-app way to place one at a real spot on the page, so its x/y is just
+  // an unused placeholder default. Drawing a colored box there would be a
+  // false claim about location (it previously landed squarely on top of the
+  // score banner). Those notes are listed instead, under their own "Teacher
+  // Notes" heading further down — a separate, clearly labeled place, not a
+  // phantom mark on the answer paper.
+  const rubricLinkedAnnotations = annotations.filter(ann => ann.linkedPointResultId);
+  const manualNotes = annotations.filter(ann => !ann.linkedPointResultId && ann.correctionText?.trim());
+
   // Group annotations that belong to the same correction (a quote spanning
   // multiple lines produces one box per line, all sharing one note) so each
   // gets exactly one number, not a floating text callout per box. Floating
@@ -274,8 +287,8 @@ export async function exportAnnotatedPdf(
   // A small colored number badge on the text plus one clean list below can
   // never collide, however close together the flagged phrases are.
   const groups = new Map<string, Annotation[]>();
-  annotations.forEach(ann => {
-    const key = ann.linkedPointResultId || ann.id;
+  rubricLinkedAnnotations.forEach(ann => {
+    const key = ann.linkedPointResultId!;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(ann);
   });
@@ -385,6 +398,37 @@ export async function exportAnnotatedPdf(
         y -= 13;
       }
       y -= 10;
+    }
+  }
+
+  // Teacher Notes — a separate page, clearly labeled, distinct from the
+  // rubric breakdown above. These are free-standing comments the teacher
+  // wrote, not tied to any rubric point or its marks, so they read as the
+  // teacher's own voice rather than being mixed into the auto-generated
+  // per-criterion feedback.
+  if (manualNotes.length > 0) {
+    const teacherNotesPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    let y = PAGE_HEIGHT - 50;
+    teacherNotesPage.drawText('Teacher Notes', { x: MARGIN_X, y, size: 16, font: fontBold, color: COLOR.ink });
+    y -= 20;
+    teacherNotesPage.drawText('Free-standing notes added by the teacher — not tied to a specific rubric point or its marks.', {
+      x: MARGIN_X,
+      y,
+      size: 9,
+      font,
+      color: COLOR.inkSoft,
+    });
+    y -= 26;
+
+    for (const note of manualNotes) {
+      if (y < 70) break;
+      teacherNotesPage.drawRectangle({ x: MARGIN_X, y: y - 3, width: 8, height: 8, color: COLOR.ink });
+      const lines = wrapPlainText(sanitizeFreely(font, note.correctionText), 92);
+      lines.forEach((line, i) => {
+        if (y - i * 13 < 60) return;
+        teacherNotesPage.drawText(line, { x: MARGIN_X + 14, y: y - i * 13, size: 10, font, color: COLOR.ink });
+      });
+      y -= lines.length * 13 + 12;
     }
   }
 
