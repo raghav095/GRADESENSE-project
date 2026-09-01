@@ -1,6 +1,20 @@
-# GradeSense — Architecture, Component Map & System Flow Guide
+# GradeSense — How It Works
 
-This document is a comprehensive, end-to-end structural breakdown of **GradeSense**: how the application works, how data flows through the backend pipeline, where every component is placed, and exactly which button triggers which action across the interface.
+This is a plain-language walkthrough of how GradeSense actually works, followed by a detailed reference map (file locations, every button, every data flow) for anyone who wants to look something up.
+
+---
+
+## The short version
+
+A teacher uploads (or pastes) a student's answer to a question that already has a model answer and a rubric attached to it. GradeSense sends the answer, the question, and the rubric to an LLM (or a deterministic offline grader if no LLM is configured) and asks it to judge each rubric point separately — not just produce one number.
+
+For every rubric point, the model has to say: is this correct, partial, missing, or wrong; how many marks; and — critically — quote the exact part of the student's answer that justifies that judgment. That evidence quote is the load-bearing part of the whole design. The backend takes that quote and actually searches for it in the student's real answer text. If it's not there, or doesn't match closely enough, that's a red flag — the system just caught the model claiming evidence that doesn't exist, and it refuses to draw an annotation for something it can't back up.
+
+Once every point is graded, some plain arithmetic (not the LLM) clamps each mark to its maximum and adds them up for the total — the model is never trusted to do that math itself. Then a confidence score gets computed from how much of the evidence actually matched and whether a second "does this quote really justify this?" check agreed with the first pass. If confidence is low, or the API failed, or the model's output didn't parse, or a rubric point needs a diagram nobody can actually see — the result gets flagged for a human to check, with a specific reason attached, instead of just being presented as correct.
+
+The flagged mistakes get underlined or boxed directly on a rendered copy of the answer, each with its own correction note, and a teacher can move, edit, or delete any of those notes afterward without re-running the whole grading process — annotations live in their own table, completely separate from the grade itself. When it's time to hand the result back, GradeSense builds a fresh annotated PDF from scratch (never edits the file the student actually uploaded) and that's what gets exported.
+
+That's the whole system: grade every point with evidence, verify the evidence is real, never trust the model's arithmetic, and say so clearly whenever something couldn't actually be checked.
 
 ---
 
@@ -241,7 +255,7 @@ studentAnswerText (original, unmodified)
                           - The originally uploaded file is never opened in write mode
                                             │
                                             ▼
-                          [ Browser downloads annotated-grade-res-xxx.pdf ]
+                          [ Browser downloads "<Student Name>_<Question Title>_Annotated.pdf" ]
 ```
 
 ---

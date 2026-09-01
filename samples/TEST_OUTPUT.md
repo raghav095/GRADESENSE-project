@@ -59,7 +59,8 @@ The suite has 14 automated tests in `backend/tests/gradingPipeline.test.ts`. The
 Beyond the automated suite, the following were verified manually against the running application this session (live route-level tests against isolated scratch databases, never the production data):
 
 - Question upload/creation persists across server restarts.
-- PDF and DOCX upload → text extraction → grading, for both a strong answer and the intentionally-flawed sample answer (see `samples/Student_Answer_Ananya_Rao.pdf` and `ERROR_KEY.md`).
+- Each of the three sample answer PDFs (`samples/Student_Answer_Ananya_Rao_Q1_Science.pdf`, `_Q2_English.pdf`, `_Q3_Economics.pdf` — one file per question, matching how the app is actually used: one upload per question) graded correctly and independently against its own question, with scores consistent with the intended mistakes in `ERROR_KEY.md`.
+- DOCX upload → text extraction → grading, verified against a real minimal .docx.
 - A fully blank submission scores 0 with `needsHumanReview: false` (a blank answer is not "uncertain," it's confidently empty).
 - A pasted-text submission (no file) grades correctly and is never flagged for a diagram it couldn't have.
 - Manual teacher notes: create, edit, and delete, independent of re-grading.
@@ -67,4 +68,4 @@ Beyond the automated suite, the following were verified manually against the run
 - Deleting a result removes it from history immediately.
 - Rejecting an unsupported upload (e.g. an image) returns a clear error and leaves no orphaned file on disk.
 - Exporting the annotated PDF produces a real, valid PDF with a human-readable filename (student name + question), never touching the original uploaded file.
-- The diagram/figure rubric criterion, when Gemini vision + poppler are available, is assessed from the actual uploaded page image rather than being blindly flagged — verified against `samples/Student_Answer_Ananya_Rao.pdf`'s real circuit diagram with a live API call.
+- The diagram/figure rubric criterion, when Gemini vision + poppler are available, is assessed from the actual uploaded page image rather than being blindly flagged — verified against `samples/Student_Answer_Ananya_Rao_Q1_Science.pdf`'s real circuit diagram with a live API call, both as a full-marks (satisfied) and a docked (unsatisfied) result depending on the diagram's actual content.

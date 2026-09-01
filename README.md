@@ -1,35 +1,36 @@
 # GradeSense — Reliable AI Grading & Annotation Tool
 
-A reliable, explainable AI grading and annotation tool built for the **GradeSense Technical Assignment (AI/ML Product Engineering Intern Role)**.
+A grading and annotation tool built for the **GradeSense Technical Assignment (AI/ML Product Engineering Intern Role)**. It reads a student's answer, compares it against a model answer and rubric, gives a score with evidence for every point, and marks up the mistakes directly on the answer paper.
 
-> 📖 **Full System Architecture & Interaction Flow Guide:** Read [`ARCHITECTURE_FLOW.md`](ARCHITECTURE_FLOW.md) for a complete breakdown of file locations, screen layouts, button interaction matrices, and end-to-end data flows.
+> 📖 For a plain-language walkthrough of how the whole system fits together, see [`ARCHITECTURE_FLOW.md`](ARCHITECTURE_FLOW.md).
 
 ---
 
-## Executive Summary & Design Philosophy
+## What this is actually solving
 
-AI grading is not merely about producing a single score number — it requires **transparency, consistency, and structural reliability** so teachers can immediately verify what a student wrote, where errors occurred, how many marks were lost, and how to improve.
+A score by itself isn't useful to a teacher — they need to see what the student wrote, where it went wrong, how many marks that cost, and whether they can trust the number at all. So the whole system is built around a few plain rules, not just "call an LLM and show the result":
 
-GradeSense addresses the core failure modes of standard LLM grading through **four structural principles**:
-
-1. **Reasoning-Based Evaluation Over Keyword Similarity:** Prompts evaluate criterion satisfaction and logical argument validity. An English essay arguing the opposite conclusion of a reference answer receives full credit if well-reasoned. A Science answer explaining physical mechanisms correctly receives full marks even without specific jargon, while surface keyword matches containing actual conceptual errors (e.g. wiring a voltmeter in series) are correctly marked incorrect.
-2. **Hard Code Invariants for Scores:** Rubric point marks are clamped strictly in TypeScript code to $[0, \text{maxMarks}]$ and total score is strictly calculated as $\sum \text{marksAwarded}$. The LLM is never trusted to calculate the total score or exceed mark limits.
-3. **Decoupled, Editable Annotations:** Bounding boxes, underlines, and correction callout notes are persisted independently in SQLite. Teachers can drag to reposition, edit correction notes, delete, or manually add annotations via CRUD endpoints without re-triggering LLM grading.
-4. **Dual Grader Architecture, with two distinct failure modes:** Features a live Google Gemini LLM grader (`@google/genai`) alongside a zero-dependency deterministic `MockGrader`. A network/API failure gets one backoff retry, then falls back to MockGrader as `status: 'degraded'`. A response that fails Zod schema validation gets one retry with a stricter "JSON only" prompt, then falls back to MockGrader as `status: 'failed'`. Either way `needsHumanReview = true` and the reason is shown verbatim in the UI — these are different problems, so they're reported differently rather than collapsed into one generic "something went wrong."
-5. **Honest About What It Can't See — With an Optional Upgrade Path:** Text extraction cannot see a diagram or figure. By default, any rubric criterion depending on one is flagged for mandatory human review rather than confidently guessed either way — per the same principle as #4, uncertainty is reported, not hidden. When `poppler-utils` is installed (optional, see Prerequisites) and live Gemini credentials are configured, GradeSense goes further: it rasterizes the uploaded page(s) and sends the actual image to Gemini's vision input for a real visual assessment of that specific criterion, replacing the automatic review flag with a genuine (and independently verified — see below) judgment. If poppler isn't installed, or the vision call fails for any reason, this silently falls back to the same honest review-flag behavior — nothing about core grading depends on it.
+- **Grade the reasoning, not the wording.** An essay that argues the opposite conclusion from the model answer still gets full marks if it's well-argued. A science answer that explains the physics correctly without using the exact textbook terms still gets full marks. But an answer that uses the right keywords while getting the actual concept wrong (like wiring a voltmeter in series instead of parallel) is still marked wrong — matching words isn't the same as being correct.
+- **Never trust the model with the arithmetic.** Every rubric-point score is clamped in plain code to never exceed its maximum, and the total is always the sum of the individual marks — never a number the AI reports on its own.
+- **Annotations are their own thing, not glued to grading.** A teacher can move, edit, delete, or add a note without re-grading the paper. Editing an annotation and re-running the AI are two completely separate actions.
+- **There are two graders, and failures are reported honestly.** A live Gemini grader and a fully offline deterministic one (no API, no key needed). If the live API fails, it retries once, then falls back to the offline grader and says so plainly (`status: degraded`). If the API responds but the output doesn't parse, it retries with a stricter prompt, then falls back and says that instead (`status: failed`). These are different problems, so they're never collapsed into one vague "something went wrong."
+- **If it can't see something, it says so instead of guessing.** Text extraction can't see a diagram — so by default, any rubric point that depends on one gets flagged for a human to check rather than being scored blind. If `poppler-utils` happens to be installed and a live Gemini key is configured, GradeSense goes one step further and actually looks at the page image to judge that point for real — but that's a bonus on top of the honest default, not something the rest of the app depends on.
 
 ---
 
 ## Technical Stack
 
-| Layer | Technology | Rationale |
+| Layer | Technology | Why |
 |---|---|---|
-| **Frontend** | React 19 + TypeScript + Vite | Academic paper design system, quiet typography, native TS support |
-| **Backend** | Node.js + Express + TypeScript | Lightweight REST server, shared TS domain models |
-| **Database** | SQLite via `better-sqlite3` | Zero-setup, single-file local persistence with WAL mode |
-| **LLM Engine** | Google Gemini (`@google/genai`) + Mock Grader | Multi-pass LLM pipeline with deterministic offline test fallback |
-| **PDF Processing** | `pdf-parse` & `pdf-lib` | Text extraction and non-destructive PDF canvas vector annotation overlay |
-| **Testing** | Vitest | Fast, TS-native test execution with zero config |
+| **Frontend** | React + TypeScript + Vite | Fast dev loop, native TS support |
+| **Backend** | Node.js + Express + TypeScript | Simple REST server, shared TS types with the frontend |
+| **Database** | SQLite via `better-sqlite3` | One local file, no separate DB server to run |
+| **Grading** | Google Gemini (`@google/genai`) + a deterministic Mock Grader | Live LLM grading, with a zero-dependency offline fallback that needs no API key at all |
+| **PDF reading** | `pdfjs-dist` | Extracts text from an uploaded PDF |
+| **DOCX reading** | `mammoth` | Extracts text from an uploaded Word document |
+| **PDF writing** | `pdf-lib` | Builds the annotated PDF export (never touches the original upload) |
+| **Diagram vision (optional)** | `poppler-utils` (`pdftoppm`) + Gemini vision | Renders a page to an image so a diagram-based rubric point can actually be looked at, not just flagged |
+| **Testing** | Vitest | TS-native, fast, no extra config |
 
 ---
 

@@ -124,6 +124,7 @@ export function initializeDatabase(dbPath?: string): Database.Database {
   migrateAddedColumns(db);
   seedDefaultQuestions(db);
   backfillModelAnswerText(db);
+  backfillCorrectedRubricWording(db);
   return db;
 }
 
@@ -153,6 +154,22 @@ function migrateAddedColumns(db: Database.Database) {
 function backfillModelAnswerText(db: Database.Database) {
   const update = db.prepare('UPDATE questions SET model_answer_text = ? WHERE id = ? AND (model_answer_text IS NULL OR model_answer_text = ?)');
   Object.entries(MODEL_ANSWERS).forEach(([id, text]) => update.run(text, id, ''));
+}
+
+// Two seeded rubric criteria drifted from the officially-provided marking
+// rubric's wording (found by re-reading `samples/GradeSense MA (1).pdf`
+// against what's actually seeded here). This corrects an already-running
+// database's existing rows too — the CREATE TABLE seed only ever applies to
+// a brand-new empty database, so without this, an app that had already been
+// running would keep the old wording forever.
+const CORRECTED_RUBRIC_WORDING: Record<string, string> = {
+  'q1-rp5': 'Clear, logically structured explanation with a properly labelled diagram and conventional current direction indicated',
+  'q2-rp4': 'Uses relevant examples and demonstrates reasoning rather than merely making unsupported claims',
+};
+
+function backfillCorrectedRubricWording(db: Database.Database) {
+  const update = db.prepare('UPDATE rubric_points SET criterion = ? WHERE id = ? AND criterion != ?');
+  Object.entries(CORRECTED_RUBRIC_WORDING).forEach(([id, text]) => update.run(text, id, text));
 }
 
 function seedDefaultQuestions(db: Database.Database) {
@@ -187,7 +204,7 @@ function seedDefaultQuestions(db: Database.Database) {
     { id: 'q1-rp2', criterion: 'Ammeter connected in series and voltmeter connected in parallel across the bulb (or component being measured)', max: 1.0, order: 2 },
     { id: 'q1-rp3', criterion: 'Explains closed path of current flow and functional roles of components', max: 1.0, order: 3 },
     { id: 'q1-rp4', criterion: 'Explains Ohm’s law relationship (increased resistance decreases current flowing when voltage is constant)', max: 1.0, order: 4 },
-    { id: 'q1-rp5', criterion: 'Properly labelled diagram with all components shown and conventional current direction indicated', max: 1.0, order: 5 },
+    { id: 'q1-rp5', criterion: 'Clear, logically structured explanation with a properly labelled diagram and conventional current direction indicated', max: 1.0, order: 5 },
   ];
   q1Rubrics.forEach(r => insertRubric.run(r.id, 'q1-science', r.criterion, r.max, r.order));
 
@@ -206,7 +223,7 @@ function seedDefaultQuestions(db: Database.Database) {
     { id: 'q2-rp1', criterion: 'States a clear, unambiguous position on the essay prompt', max: 1.0, order: 1 },
     { id: 'q2-rp2', criterion: 'Provides well-structured arguments supported by relevant concrete examples', max: 1.0, order: 2 },
     { id: 'q2-rp3', criterion: 'Meaningfully considers and addresses an opposing viewpoint', max: 1.0, order: 3 },
-    { id: 'q2-rp4', criterion: 'Demonstrates depth of reasoning rather than simple reliance on templates or keywords', max: 1.0, order: 4 },
+    { id: 'q2-rp4', criterion: 'Uses relevant examples and demonstrates reasoning rather than merely making unsupported claims', max: 1.0, order: 4 },
     { id: 'q2-rp5', criterion: 'Concludes with a coherent, logical synthesis of the presented arguments', max: 1.0, order: 5 },
   ];
   q2Rubrics.forEach(r => insertRubric.run(r.id, 'q2-english', r.criterion, r.max, r.order));
