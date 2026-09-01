@@ -88,8 +88,7 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
     if (!canSubmit || saving) return;
     setSaving(true);
     setError(null);
@@ -125,7 +124,19 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
+        {/*
+          Deliberately a <div>, not a <form> — this modal is rendered as a
+          child of Stage1Provide's own <form> (the "Grade This Paper" form).
+          A <form> nested inside another <form> is invalid HTML with
+          undefined submit behavior across browsers: "Create Question" (a
+          type="submit" button) could silently fail to fire this component's
+          own submit handler at all. Confirmed as the actual cause of
+          "created the question via AI draft but it never shows up to
+          select" — the draft step (a plain button + fetch) worked fine;
+          only the actual create-and-save step, which relied on native form
+          submission, was affected.
+        */}
+        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
           <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
             {error && (
               <div style={{ background: '#FFF5F5', border: '1px solid var(--red-pen)', padding: '0.6rem 0.875rem', marginBottom: '1rem', color: 'var(--red-pen)', fontSize: '0.8125rem' }}>
@@ -227,11 +238,11 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
             <button type="button" onClick={onCancel} className="btn btn-secondary">
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={!canSubmit || saving}>
+            <button type="button" onClick={handleSubmit} className="btn btn-primary" disabled={!canSubmit || saving}>
               {saving ? 'Creating...' : 'Create Question'}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
