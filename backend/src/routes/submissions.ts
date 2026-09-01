@@ -11,7 +11,12 @@ import { Submission } from '../services/types.js';
 
 const router = Router();
 
-const uploadsDir = path.join(process.cwd(), 'uploads');
+// Resolved relative to this file, not process.cwd() — the same class of bug
+// as the earlier dotenv path fix (see server.ts): whichever directory the
+// server happens to be launched from would otherwise change where uploads
+// are written, silently splitting them across two different folders depending
+// on how the process was started.
+const uploadsDir = path.join(__dirname, '../../uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }

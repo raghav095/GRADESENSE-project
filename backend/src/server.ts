@@ -29,7 +29,11 @@ initializeDatabase();
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// Resolved relative to this file, not process.cwd() — see the matching fix
+// in routes/submissions.ts and the dotenv fix just above: whichever
+// directory happens to launch the server must never change where persistent
+// files are found.
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Routes
 app.use('/api/questions', questionsRouter);

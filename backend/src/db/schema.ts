@@ -15,7 +15,14 @@ const MODEL_ANSWERS: Record<string, string> = {
 };
 
 export function initializeDatabase(dbPath?: string): Database.Database {
-  const file = dbPath || path.join(process.cwd(), 'gradesense.db');
+  // Resolved relative to this file, not process.cwd() — the same class of
+  // bug as the dotenv path fix in server.ts. Whichever directory the server
+  // happens to be launched from (repo root vs backend/, a different script,
+  // a restart under a different shell) must never change which database
+  // file gets opened — otherwise a question or result saved under one
+  // launch method silently disappears the next time the server starts from
+  // a different one, landing in a brand-new empty (re-seeded) database.
+  const file = dbPath || path.join(__dirname, '../../gradesense.db');
   const db = new Database(file);
 
   // Enable WAL mode for better concurrency
