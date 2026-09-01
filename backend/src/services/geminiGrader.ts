@@ -218,6 +218,65 @@ ${strictSuffix}`;
     }
   }
 
+  /**
+   * Assesses ONE rubric criterion that depends on a diagram/figure, using
+   * the actual rendered page image(s) instead of extracted text — the only
+   * way this pipeline can ever have a real opinion about something visual,
+   * since text extraction never sees pixels. A best-effort enhancement: on
+   * any failure (no credentials, malformed response) this returns null so
+   * the caller falls back to flagging the point for human review, exactly
+   * as it did before this existed.
+   */
+  async assessVisualCriterion(
+    questionContext: string,
+    criterion: string,
+    maxMarks: number,
+    pageImages: Buffer[]
+  ): Promise<{ satisfied: boolean; marksAwarded: number; feedback: string } | null> {
+    if (!this.ai || pageImages.length === 0) return null;
+
+    const prompt = `You are assessing ONE specific criterion from a grading rubric, using the actual page image(s) of a student's answer — not extracted text, since this criterion depends on a diagram/figure that text extraction cannot see.
+
+QUESTION CONTEXT:
+${questionContext}
+
+CRITERION TO ASSESS (worth ${maxMarks} mark(s)):
+${criterion}
+
+Look at the image(s) and decide whether the criterion is satisfied. Be strict — only mark it satisfied if the diagram genuinely and clearly meets the criterion as described. If there is no diagram at all in the image(s), it is not satisfied.
+
+Return ONLY a JSON object (no markdown fences, no prose):
+{
+  "satisfied": boolean,
+  "feedback": "one or two sentences explaining what you saw and why it does or doesn't satisfy the criterion"
+}`;
+
+    try {
+      const parts: any[] = [{ text: prompt }];
+      for (const img of pageImages) {
+        parts.push({ inlineData: { mimeType: 'image/png', data: img.toString('base64') } });
+      }
+
+      const response = await this.ai.models.generateContent({
+        model: this.modelName,
+        contents: [{ role: 'user', parts }],
+        config: { responseMimeType: 'application/json', temperature: 0.1 },
+      });
+
+      const cleanJsonStr = (response.text || '').replace(/```json\n?|\n?```/g, '').trim();
+      const parsed = JSON.parse(cleanJsonStr);
+      if (typeof parsed.satisfied !== 'boolean') return null;
+
+      return {
+        satisfied: parsed.satisfied,
+        marksAwarded: parsed.satisfied ? maxMarks : 0,
+        feedback: typeof parsed.feedback === 'string' ? parsed.feedback : 'Assessed from the uploaded page image.',
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async verify(
     question: Question,
     rubricPoint: RubricPoint,

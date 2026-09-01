@@ -15,7 +15,9 @@ import { GeminiGrader, GraderCallError } from './geminiGrader.js';
 import { RawLlmGradingOutputSchema } from './llmOutputSchema.js';
 import { computeTextLayout, boxesForRange } from './textLayout.js';
 import { fuzzyMatchQuote } from './textMatch.js';
+import { renderPdfPagesToImages } from './pdfRasterize.js';
 import crypto from 'crypto';
+import fs from 'fs';
 
 export { fuzzyMatchQuote } from './textMatch.js';
 
@@ -294,6 +296,65 @@ export async function runGradingPipeline(
     }
   }
 
+  // Step 4.5: Best-effort vision assessment for diagram/figure criteria —
+  // only attempted when the primary grader actually has vision capability
+  // (a real GeminiGrader with working credentials) and the original upload
+  // is a rasterizable PDF (DOCX rasterization isn't built — those criteria
+  // still fall back to the honest review flag below). On ANY failure (no
+  // credentials, a missing native rendering dependency in whatever
+  // environment this runs in, a malformed response) this silently does
+  // nothing and every diagram criterion keeps behaving exactly as before —
+  // this can only ever add a real check on top of that, never regress it.
+  const visuallyAssessedRubricPointIds = new Set<string>();
+  if (isVisualEvidenceBlind && primaryGrader instanceof GeminiGrader && submission.studentAnswerFilePath?.toLowerCase().endsWith('.pdf')) {
+    try {
+      const visualTargets = pointResults
+        .map((pr, idx) => ({ pr, idx, rp: rubricPoints.find(r => r.id === pr.rubricPointId) }))
+        .filter((t): t is { pr: RubricPointResult; idx: number; rp: RubricPoint } => Boolean(t.rp) && visualCriterionPattern.test(t.rp!.criterion));
+
+      if (visualTargets.length > 0) {
+        const fileBuffer = fs.readFileSync(submission.studentAnswerFilePath);
+        const pageImages = await renderPdfPagesToImages(fileBuffer);
+
+        if (pageImages.length > 0) {
+          const assessments = await Promise.all(
+            visualTargets.map(async ({ idx, rp }) => ({
+              idx,
+              rubricPointId: rp.id,
+              result: await primaryGrader.assessVisualCriterion!(`${question.title}\n${question.text}`, rp.criterion, rp.maxMarks, pageImages),
+            }))
+          );
+
+          for (const { idx, rubricPointId, result } of assessments) {
+            if (!result) continue; // this one point falls back to the honest review flag
+            pointResults[idx] = {
+              ...pointResults[idx],
+              marksAwarded: result.marksAwarded,
+              status: result.satisfied ? 'correct' : 'incorrect',
+              // Cleared, not carried over — whatever quote the earlier
+              // text-only pass guessed for this criterion (often just
+              // picking up the diagram's own text labels) has nothing to do
+              // with this new vision-derived judgment. Left in place, Step
+              // 5's text-verification pass would still run against it and
+              // spuriously "disagree" (the quote can't justify a visual
+              // judgment), forcing exactly the review flag this feature
+              // exists to lift — confirmed happening before this fix.
+              evidenceQuote: null,
+              evidenceMatched: false,
+              evidenceStart: null,
+              evidenceEnd: null,
+              feedback: `AI visual assessment (from the uploaded page image): ${result.feedback}`,
+            };
+            visuallyAssessedRubricPointIds.add(rubricPointId);
+          }
+        }
+      }
+    } catch {
+      // Rasterization or vision assessment failed entirely — every
+      // diagram/figure criterion falls back to the honest review flag.
+    }
+  }
+
   const computedTotal = pointResults.reduce((sum, pr) => sum + pr.marksAwarded, 0);
 
   // Step 5: Verification pass — re-check every point that has an evidence
@@ -346,8 +407,11 @@ export async function runGradingPipeline(
   // each matching point's own feedback text) — reused here to also force the
   // overall review flag, per the reliability rule ("if the system is
   // uncertain, it should say so instead of pretending to be correct").
+  // Excludes any point Step 4.5 actually got a real vision assessment for —
+  // that one genuinely was checked, so forcing review for it too would just
+  // be re-adding the exact manual-review burden this feature exists to cut.
   const visualCriteriaNeedingReview = isVisualEvidenceBlind
-    ? rubricPoints.filter(r => visualCriterionPattern.test(r.criterion)).map(r => r.criterion)
+    ? rubricPoints.filter(r => visualCriterionPattern.test(r.criterion) && !visuallyAssessedRubricPointIds.has(r.id)).map(r => r.criterion)
     : [];
 
   // needsHumanReview applies uniformly regardless of score — a full-score

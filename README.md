@@ -16,6 +16,7 @@ GradeSense addresses the core failure modes of standard LLM grading through **fo
 2. **Hard Code Invariants for Scores:** Rubric point marks are clamped strictly in TypeScript code to $[0, \text{maxMarks}]$ and total score is strictly calculated as $\sum \text{marksAwarded}$. The LLM is never trusted to calculate the total score or exceed mark limits.
 3. **Decoupled, Editable Annotations:** Bounding boxes, underlines, and correction callout notes are persisted independently in SQLite. Teachers can drag to reposition, edit correction notes, delete, or manually add annotations via CRUD endpoints without re-triggering LLM grading.
 4. **Dual Grader Architecture, with two distinct failure modes:** Features a live Google Gemini LLM grader (`@google/genai`) alongside a zero-dependency deterministic `MockGrader`. A network/API failure gets one backoff retry, then falls back to MockGrader as `status: 'degraded'`. A response that fails Zod schema validation gets one retry with a stricter "JSON only" prompt, then falls back to MockGrader as `status: 'failed'`. Either way `needsHumanReview = true` and the reason is shown verbatim in the UI — these are different problems, so they're reported differently rather than collapsed into one generic "something went wrong."
+5. **Honest About What It Can't See — With an Optional Upgrade Path:** Text extraction cannot see a diagram or figure. By default, any rubric criterion depending on one is flagged for mandatory human review rather than confidently guessed either way — per the same principle as #4, uncertainty is reported, not hidden. When `poppler-utils` is installed (optional, see Prerequisites) and live Gemini credentials are configured, GradeSense goes further: it rasterizes the uploaded page(s) and sends the actual image to Gemini's vision input for a real visual assessment of that specific criterion, replacing the automatic review flag with a genuine (and independently verified — see below) judgment. If poppler isn't installed, or the vision call fails for any reason, this silently falls back to the same honest review-flag behavior — nothing about core grading depends on it.
 
 ---
 
@@ -48,6 +49,7 @@ See [`ARCHITECTURE_FLOW.md`](ARCHITECTURE_FLOW.md) for the full button-by-button
 ### 1. Prerequisites
 - Node.js **v18+** installed (`node -v`)
 - npm **v9+** installed (`npm -v`)
+- *(Optional)* **poppler-utils** (`brew install poppler` on macOS, `apt-get install poppler-utils` on Linux) — only needed for the diagram/figure visual-assessment feature (see below). Without it, everything else works identically; diagram-dependent rubric criteria are simply flagged for human review instead of AI-assessed, which is also what happens if this is missing.
 
 ### 2. Installation
 Clone the repository and install all dependencies:
