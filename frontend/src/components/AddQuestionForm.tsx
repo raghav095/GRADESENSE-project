@@ -11,6 +11,15 @@ interface DraftRubricPoint {
   maxMarks: string;
 }
 
+const sectionLabelStyle: React.CSSProperties = {
+  fontSize: '0.75rem',
+  fontWeight: 700,
+  color: 'var(--ink-soft)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  marginBottom: '0.75rem',
+};
+
 // A modal (not an inline section pushing down the main grading form) — this
 // is an occasional, secondary action, and the earlier inline version cluttered
 // the primary "grade a paper" flow every time it was open.
@@ -26,6 +35,12 @@ interface DraftRubricPoint {
 // typing it by hand. If drafting fails (no configured credentials, API
 // error), the form stays fully usable manually — it never fabricates a
 // rubric to fall back on.
+//
+// Laid out as two columns — "The Question" (what's being asked) on the left,
+// "The Marking Standard" (model answer + rubric) on the right — at a wide
+// enough modal size that neither a long criterion sentence nor the model
+// answer textarea feels squeezed. The two-column grid collapses to one on
+// a narrow viewport via auto-fit, no separate mobile layout needed.
 export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onCancel }) => {
   const [subject, setSubject] = useState('');
   const [title, setTitle] = useState('');
@@ -115,12 +130,17 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem' }}>
-      <div className="card" style={{ width: '100%', maxWidth: 640, maxHeight: '90vh', display: 'flex', flexDirection: 'column', background: 'var(--paper-raised)', border: '1px solid var(--rule)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '1rem', borderBottom: '1px solid var(--rule)', marginBottom: '1rem' }}>
-          <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.125rem', fontWeight: 600, color: 'var(--ink)' }}>Add a New Question</div>
-          <button type="button" onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer' }}>
-            <X size={20} />
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem' }}>
+      <div className="card" style={{ width: '100%', maxWidth: 960, maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: 'var(--paper-raised)', border: '1px solid var(--rule)', padding: '1.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '1.25rem', borderBottom: '1px solid var(--rule)', marginBottom: '1.25rem' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.375rem', fontWeight: 600, color: 'var(--ink)' }}>Add a New Question</div>
+            <div style={{ fontSize: '0.8125rem', color: 'var(--ink-soft)', marginTop: '0.2rem' }}>
+              Upload or type the question, then optionally draft a starting model answer and rubric with AI — review everything before saving.
+            </div>
+          </div>
+          <button type="button" onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0, marginLeft: '1rem' }}>
+            <X size={22} />
           </button>
         </div>
 
@@ -128,117 +148,124 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
           Deliberately a <div>, not a <form> — this modal is rendered as a
           child of Stage1Provide's own <form> (the "Grade This Paper" form).
           A <form> nested inside another <form> is invalid HTML with
-          undefined submit behavior across browsers: "Create Question" (a
-          type="submit" button) could silently fail to fire this component's
-          own submit handler at all. Confirmed as the actual cause of
-          "created the question via AI draft but it never shows up to
-          select" — the draft step (a plain button + fetch) worked fine;
-          only the actual create-and-save step, which relied on native form
-          submission, was affected.
+          undefined submit behavior across browsers — see the git history on
+          this file for the bug that caused.
         */}
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
-          <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.25rem' }}>
+          <div style={{ overflowY: 'auto', flex: 1, paddingRight: '0.5rem' }}>
             {error && (
-              <div style={{ background: '#FFF5F5', border: '1px solid var(--red-pen)', padding: '0.6rem 0.875rem', marginBottom: '1rem', color: 'var(--red-pen)', fontSize: '0.8125rem' }}>
+              <div style={{ background: '#FFF5F5', border: '1px solid var(--red-pen)', padding: '0.75rem 1rem', marginBottom: '1.25rem', color: 'var(--red-pen)', fontSize: '0.8125rem' }}>
                 {error}
               </div>
             )}
 
-            <div style={{ border: '1px dashed var(--rule)', background: 'var(--paper)', padding: '1rem', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                <label htmlFor="question-pdf-upload" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--ink)', fontWeight: 600 }}>
-                  <Upload size={14} />
-                  {file ? file.name : 'Upload the question paper (PDF, optional)'}
-                </label>
-                <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => setFile(e.target.files?.[0] || null)} />
-                <button
-                  type="button"
-                  onClick={handleDraft}
-                  disabled={!canDraft || drafting}
-                  className="btn btn-primary"
-                  style={{ fontSize: '0.8125rem', padding: '0.4rem 0.75rem', opacity: !canDraft || drafting ? 0.6 : 1 }}
-                  title="Sends the question text to the live LLM for a suggested model answer and rubric — only ever pre-fills this form, nothing is saved automatically."
-                >
-                  <Sparkles size={14} /> {drafting ? 'Drafting...' : 'Draft with AI'}
-                </button>
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--ink-soft)', marginTop: '0.5rem' }}>
-                Upload a PDF or paste the question text below, then optionally use "Draft with AI" for a starting model answer and rubric — review and edit everything before saving.
-              </div>
-            </div>
-
             {draftedFromAI && (
-              <div style={{ fontSize: '0.75rem', color: 'var(--marks-good)', fontWeight: 600, marginBottom: '0.75rem' }}>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--marks-good)', fontWeight: 600, marginBottom: '1rem' }}>
                 ✓ Drafted by AI — review every field below before creating this question.
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1rem' }}>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Subject</label>
-                <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Science" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '2rem' }}>
+              {/* Left column — the question itself */}
+              <div>
+                <div style={sectionLabelStyle}>The Question</div>
+
+                <div style={{ border: '1px dashed var(--rule)', background: 'var(--paper)', padding: '1rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <label htmlFor="question-pdf-upload" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--ink)', fontWeight: 600 }}>
+                      <Upload size={14} />
+                      {file ? file.name : 'Upload the question paper (PDF, optional)'}
+                    </label>
+                    <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => setFile(e.target.files?.[0] || null)} />
+                    <button
+                      type="button"
+                      onClick={handleDraft}
+                      disabled={!canDraft || drafting}
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.8125rem', padding: '0.4rem 0.75rem', opacity: !canDraft || drafting ? 0.6 : 1 }}
+                      title="Sends the question text to the live LLM for a suggested model answer and rubric — only ever pre-fills this form, nothing is saved automatically."
+                    >
+                      <Sparkles size={14} /> {drafting ? 'Drafting...' : 'Draft with AI'}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Subject</label>
+                    <input className="form-input" value={subject} onChange={e => setSubject(e.target.value)} placeholder="e.g. Science" />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">Title</label>
+                    <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Question 4 — Photosynthesis" required />
+                  </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Question Text</label>
+                  <textarea className="form-textarea" rows={9} value={text} onChange={e => setText(e.target.value)} placeholder="Paste or type the full question prompt..." required />
+                </div>
               </div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Title</label>
-                <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Question 4 — Photosynthesis" required />
-              </div>
-            </div>
 
-            <div className="form-group">
-              <label className="form-label">Question Text</label>
-              <textarea className="form-textarea" rows={3} value={text} onChange={e => setText(e.target.value)} placeholder="Paste or type the full question prompt..." required />
-            </div>
+              {/* Right column — the marking standard */}
+              <div>
+                <div style={sectionLabelStyle}>The Marking Standard</div>
 
-            <div className="form-group">
-              <label className="form-label">Model Answer (optional — shown as a reference in the result view)</label>
-              <textarea className="form-textarea" rows={3} value={modelAnswerText} onChange={e => setModelAnswerText(e.target.value)} placeholder="The ideal/reference answer for this question..." />
-            </div>
+                <div className="form-group">
+                  <label className="form-label">Model Answer (optional — shown as a reference in the result view)</label>
+                  <textarea className="form-textarea" rows={5} value={modelAnswerText} onChange={e => setModelAnswerText(e.target.value)} placeholder="The ideal/reference answer for this question..." />
+                </div>
 
-            <div className="form-group">
-              <label className="form-label">
-                Rubric Points <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(total: {totalMarks} marks)</span>
-              </label>
-              {rubricPoints.map((row, idx) => (
-                <div key={idx} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'flex-start' }}>
-                  <input
-                    className="form-input"
-                    style={{ flex: 1 }}
-                    value={row.criterion}
-                    onChange={e => updateRow(idx, { criterion: e.target.value })}
-                    placeholder="What must be true for full credit on this point?"
-                  />
-                  <input
-                    className="form-input"
-                    type="number"
-                    min="0.5"
-                    step="0.5"
-                    style={{ width: 80 }}
-                    value={row.maxMarks}
-                    onChange={e => updateRow(idx, { maxMarks: e.target.value })}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeRow(idx)}
-                    disabled={rubricPoints.length <= 1}
-                    className="btn btn-secondary"
-                    style={{ padding: '0.4rem', opacity: rubricPoints.length <= 1 ? 0.4 : 1 }}
-                    title="Remove this rubric point"
-                  >
-                    <Trash2 size={14} />
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">
+                    Rubric Points <span style={{ color: 'var(--ink-soft)', fontWeight: 400 }}>(total: {totalMarks} marks)</span>
+                  </label>
+                  {rubricPoints.map((row, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem', alignItems: 'flex-start' }}>
+                      <textarea
+                        className="form-textarea"
+                        rows={2}
+                        style={{ flex: 1, resize: 'vertical' }}
+                        value={row.criterion}
+                        onChange={e => updateRow(idx, { criterion: e.target.value })}
+                        placeholder="What must be true for full credit on this point?"
+                      />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', flexShrink: 0 }}>
+                        <input
+                          className="form-input"
+                          type="number"
+                          min="0.5"
+                          step="0.5"
+                          style={{ width: 72 }}
+                          value={row.maxMarks}
+                          onChange={e => updateRow(idx, { maxMarks: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeRow(idx)}
+                          disabled={rubricPoints.length <= 1}
+                          className="btn btn-secondary"
+                          style={{ padding: '0.35rem', justifyContent: 'center', opacity: rubricPoints.length <= 1 ? 0.4 : 1 }}
+                          title="Remove this rubric point"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button" onClick={addRow} className="btn btn-secondary" style={{ fontSize: '0.8125rem', padding: '0.4rem 0.75rem', marginTop: '0.25rem' }}>
+                    <Plus size={13} /> Add Rubric Point
                   </button>
                 </div>
-              ))}
-              <button type="button" onClick={addRow} className="btn btn-secondary" style={{ fontSize: '0.8125rem', padding: '0.35rem 0.7rem' }}>
-                <Plus size={13} /> Add Rubric Point
-              </button>
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--rule)' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--rule)' }}>
             <button type="button" onClick={onCancel} className="btn btn-secondary">
               Cancel
             </button>
-            <button type="button" onClick={handleSubmit} className="btn btn-primary" disabled={!canSubmit || saving}>
+            <button type="button" onClick={handleSubmit} className="btn btn-primary" disabled={!canSubmit || saving} style={{ minWidth: 160 }}>
               {saving ? 'Creating...' : 'Create Question'}
             </button>
           </div>

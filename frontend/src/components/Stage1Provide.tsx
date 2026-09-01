@@ -142,32 +142,35 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
       <form onSubmit={handleSubmit}>
         <div className="form-group">
           <label className="form-label">Examination Question</label>
-          <select
-            className="form-select"
-            value={selectedQuestionId}
-            disabled={disabled}
-            onChange={e => {
-              setSelectedQuestionId(e.target.value);
-              setRubricOpen(false);
-            }}
-          >
-            {questions.map(q => (
-              <option key={q.id} value={q.id}>
-                [{q.subject}] {q.title} ({q.maxMarks} Marks)
-              </option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'stretch' }}>
+            <select
+              className="form-select"
+              style={{ flex: 1 }}
+              value={selectedQuestionId}
+              disabled={disabled}
+              onChange={e => {
+                setSelectedQuestionId(e.target.value);
+                setRubricOpen(false);
+              }}
+            >
+              {questions.map(q => (
+                <option key={q.id} value={q.id}>
+                  [{q.subject}] {q.title} ({q.maxMarks} Marks)
+                </option>
+              ))}
+            </select>
 
-          {!addQuestionOpen && (
             <button
               type="button"
               onClick={() => setAddQuestionOpen(true)}
               disabled={disabled}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', background: 'none', border: 'none', padding: 0, marginTop: '0.5rem', cursor: disabled ? 'default' : 'pointer', color: 'var(--ink-soft)', fontSize: '0.8125rem', fontWeight: 600, opacity: disabled ? 0.5 : 1 }}
+              className="btn btn-secondary"
+              style={{ flexShrink: 0, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}
+              title="Add a new question with its own rubric — typed manually, or drafted with AI from an uploaded question paper"
             >
-              <Plus size={14} /> Add a new question
+              <Plus size={14} /> Add Question
             </button>
-          )}
+          </div>
 
           {addQuestionOpen && <AddQuestionForm onCreated={handleQuestionCreated} onCancel={() => setAddQuestionOpen(false)} />}
         </div>
