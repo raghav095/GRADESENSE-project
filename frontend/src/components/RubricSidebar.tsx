@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GradingResult, RubricPointResult, Annotation } from '../types';
-import { Edit3, Trash2, Plus, ChevronRight, ChevronDown } from 'lucide-react';
+import { Edit3, Trash2, Plus, ChevronRight, ChevronDown, ScanEye } from 'lucide-react';
 import { readJson } from '../utils/api';
 
 interface RubricSidebarProps {
@@ -167,6 +167,12 @@ export const RubricSidebar: React.FC<RubricSidebarProps> = ({
           const key = statusKey(pr.status, pr.marksAwarded, pr.maxMarks);
           const linkedAnn = annotations.find(a => a.linkedPointResultId === pr.id);
           const hasEvidence = Boolean(pr.evidenceQuote && pr.evidenceMatched);
+          // The only signal that this point was checked by looking at the
+          // actual uploaded page image (Gemini vision), not by reading
+          // extracted text, is this exact prefix gradingPipeline.ts writes
+          // into the feedback — surfaced here as a visible badge instead of
+          // requiring someone to notice it buried in the feedback text.
+          const isVisuallyAssessed = pr.feedback.startsWith('AI visual assessment');
 
           return (
             <div key={pr.id} style={{ borderBottom: '1px solid var(--rule)' }}>
@@ -187,6 +193,15 @@ export const RubricSidebar: React.FC<RubricSidebarProps> = ({
                   {isSelected ? <ChevronDown size={14} color="var(--ink-soft)" style={{ flexShrink: 0 }} /> : <ChevronRight size={14} color="var(--ink-soft)" style={{ flexShrink: 0 }} />}
                   <span style={{ width: 8, height: 8, borderRadius: '50%', background: STATUS_COLOR[key], flexShrink: 0 }} />
                   <span style={{ fontSize: '0.9375rem', fontWeight: isSelected ? 600 : 500, color: 'var(--ink)' }}>{pr.criterion}</span>
+                  {isVisuallyAssessed && (
+                    <span
+                      className="status-tag"
+                      style={{ color: 'var(--ink-soft)', background: 'var(--paper)', borderColor: 'var(--rule)', flexShrink: 0 }}
+                      title="Checked by having Gemini look directly at the uploaded page image — not from extracted text, since this criterion depends on a diagram/figure."
+                    >
+                      <ScanEye size={11} /> Visual Check
+                    </span>
+                  )}
                 </div>
                 <div className="mono" style={{ fontSize: '0.875rem', fontWeight: 600, color: STATUS_COLOR[key], flexShrink: 0 }}>
                   {pr.marksAwarded}/{pr.maxMarks}
@@ -214,6 +229,25 @@ export const RubricSidebar: React.FC<RubricSidebarProps> = ({
                     </div>
                   )}
 
+                  {isVisuallyAssessed && (
+                    <div>
+                      <div style={labelStyle}>Evidence</div>
+                      <div
+                        style={{
+                          margin: '0.3rem 0 0',
+                          padding: '0.4rem 0.6rem',
+                          background: 'var(--paper)',
+                          fontSize: '0.8125rem',
+                          color: 'var(--ink-soft)',
+                          borderLeft: '2px solid var(--rule)',
+                        }}
+                      >
+                        No text quote — this criterion was checked by looking directly at the uploaded page image
+                        (see "View Original Uploaded File"), not by reading the answer text.
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <div style={labelStyle}>Feedback</div>
                     <div style={{ marginTop: '0.3rem' }}>
@@ -223,7 +257,11 @@ export const RubricSidebar: React.FC<RubricSidebarProps> = ({
                         <>
                           <div style={{ fontSize: '0.8125rem', color: 'var(--ink)', lineHeight: 1.5 }}>{pr.feedback}</div>
                           <div style={{ fontSize: '0.75rem', color: 'var(--ink-soft)', fontStyle: 'italic', marginTop: '0.3rem' }}>
-                            {key === 'good' ? 'No note attached — this point was marked correct.' : 'No editable note attached (no locatable evidence to anchor one to).'}
+                            {key === 'good'
+                              ? 'No note attached — this point was marked correct.'
+                              : isVisuallyAssessed
+                              ? 'No editable note attached (assessed from the image directly, not anchored to a text location).'
+                              : 'No editable note attached (no locatable evidence to anchor one to).'}
                           </div>
                         </>
                       )}
