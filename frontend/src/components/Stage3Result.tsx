@@ -39,8 +39,25 @@ export const Stage3Result: React.FC<Stage3ResultProps> = ({ result: initialResul
 
       {/* All actions for this result, grouped together — reset on the left,
           inspection/export on the right — instead of competing for space
-          up in the header alongside the score and status. */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+          up in the header alongside the score and status. Sticky to the
+          bottom of the viewport (not just the end of the document) so
+          "Export Annotated PDF" stays reachable while scrolling through a
+          long rubric or answer, instead of requiring a scroll all the way
+          past everything first. */}
+      <div
+        style={{
+          position: 'sticky',
+          bottom: 0,
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginTop: '1.5rem',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          background: 'var(--paper)',
+          borderTop: '1px solid var(--rule)',
+          padding: '1rem 0',
+        }}
+      >
         <button className="btn btn-secondary" onClick={onGradeAnother}>
           <ArrowLeft size={14} />
           Grade Another Paper

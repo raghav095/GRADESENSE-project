@@ -3,7 +3,7 @@
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { PDFDocument, PDFPage, rgb, StandardFonts } from 'pdf-lib';
 import { Annotation } from './types.js';
-import { computeTextLayout, pageCount, PAGE_WIDTH, PAGE_HEIGHT, MARGIN_X, FONT_SIZE } from './textLayout.js';
+import { computeTextLayout, pageCount, PAGE_WIDTH, PAGE_HEIGHT, MARGIN_X, MARGIN_RIGHT, FONT_SIZE } from './textLayout.js';
 
 // Uses pdfjs-dist directly rather than the `pdf-parse` package. `pdf-parse`
 // wraps a very old, unmaintained pdf.js build that throws "Invalid PDF
@@ -321,9 +321,15 @@ export async function exportAnnotatedPdf(
       }
 
       // Only the first box in the group gets the number badge — the rest
-      // are continuation lines of the same flagged quote.
+      // are continuation lines of the same flagged quote. Placed in the
+      // right margin (never occupied by answer text) rather than right
+      // after wherever that physical line happened to wrap — an inline
+      // badge for a multi-line quote landed at that line's wrap point,
+      // which usually fell mid-sentence right before the quote continued
+      // on the next line, visually cutting into the reading flow. A
+      // margin badge can never collide with text, however the quote wraps.
       if (i === 0) {
-        const badgeX = Math.min(ann.x + ann.width + 2, PAGE_WIDTH - MARGIN_X - 16);
+        const badgeX = PAGE_WIDTH - MARGIN_RIGHT + 10;
         page.drawRectangle({ x: badgeX, y: pdfY + 2, width: 14, height: 12, color: badgeColor });
         page.drawText(String(number), {
           x: badgeX + (number < 10 ? 5 : 2),
