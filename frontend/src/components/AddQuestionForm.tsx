@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, X, Sparkles, Upload } from 'lucide-react';
+import { readJson } from '../utils/api';
 
 interface AddQuestionFormProps {
   onCreated: (newQuestionId: string) => void;
@@ -116,7 +117,7 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
           body: JSON.stringify({ text }),
         });
       }
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Drafting failed');
 
       setText(data.questionText || text);
@@ -150,7 +151,7 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
           rubricPoints: rubricPoints.map(r => ({ criterion: r.criterion.trim(), maxMarks: Number(r.maxMarks) })),
         }),
       });
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data.error || 'Failed to create question');
       onCreated(data.id);
     } catch (err: any) {

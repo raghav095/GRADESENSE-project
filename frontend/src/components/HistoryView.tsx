@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { GradingResult } from '../types';
 import { Download, Trash2 } from 'lucide-react';
+import { readJson } from '../utils/api';
 
 interface HistoryViewProps {
   onSelectResult: (resultId: string) => void;
@@ -17,7 +18,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectResult }) => {
   const fetchResults = () => {
     setLoading(true);
     fetch('/api/results')
-      .then(res => res.json())
+      .then(res => readJson(res))
       .then(data => setResults(data))
       .catch(() => {})
       .finally(() => setLoading(false));

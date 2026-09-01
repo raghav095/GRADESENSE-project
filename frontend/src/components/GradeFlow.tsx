@@ -3,6 +3,7 @@ import { Question, GradingResult } from '../types';
 import { Stage1Provide } from './Stage1Provide';
 import { ProcessingStrip } from './ProcessingStrip';
 import { Stage3Result } from './Stage3Result';
+import { readJson } from '../utils/api';
 
 interface GradeFlowProps {
   questions: Question[];
@@ -37,7 +38,7 @@ export const GradeFlow: React.FC<GradeFlowProps> = ({ questions, openResultId, o
   useEffect(() => {
     if (!openResultId) return;
     fetch(`/api/results/${openResultId}`)
-      .then(res => res.json())
+      .then(res => readJson(res))
       .then((data: GradingResult) => {
         setResult(data);
         setViewingFromHistory(true);

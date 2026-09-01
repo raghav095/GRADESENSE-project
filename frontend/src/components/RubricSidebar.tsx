@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GradingResult, RubricPointResult, Annotation } from '../types';
 import { Edit3, Trash2, Plus, ChevronRight, ChevronDown } from 'lucide-react';
+import { readJson } from '../utils/api';
 
 interface RubricSidebarProps {
   result: GradingResult;
@@ -62,7 +63,7 @@ export const RubricSidebar: React.FC<RubricSidebarProps> = ({
         body: JSON.stringify({ correctionText: editingText }),
       });
       if (res.ok) {
-        const updated = await res.json();
+        const updated = await readJson(res);
         onUpdateAnnotations(annotations.map(a => (a.id === id ? updated : a)));
       }
     } catch {
@@ -94,7 +95,7 @@ export const RubricSidebar: React.FC<RubricSidebarProps> = ({
       }),
     });
     if (res.ok) {
-      const created: Annotation = await res.json();
+      const created: Annotation = await readJson(res);
       onUpdateAnnotations([...annotations, created]);
       handleStartEdit(created);
     }

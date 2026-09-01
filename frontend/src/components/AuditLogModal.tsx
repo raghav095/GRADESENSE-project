@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LlmCallLog } from '../types';
 import { X } from 'lucide-react';
+import { readJson } from '../utils/api';
 
 interface AuditLogModalProps {
   resultId: string;
@@ -13,7 +14,7 @@ export const AuditLogModal: React.FC<AuditLogModalProps> = ({ resultId, onClose 
 
   useEffect(() => {
     fetch(`/api/results/${resultId}/logs`)
-      .then(res => res.json())
+      .then(res => readJson(res))
       .then(data => setLogs(data))
       .catch(() => {})
       .finally(() => setLoading(false));
