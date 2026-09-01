@@ -1,7 +1,9 @@
 import { Router } from 'express';
+import fs from 'fs';
 import { getDb } from '../db/index.js';
 import { exportAnnotatedPdf } from '../services/pdfService.js';
 import { toPublicFileUrl } from '../services/fileUrl.js';
+import { renderPdfPagesToImages } from '../services/pdfRasterize.js';
 
 const router = Router();
 
@@ -147,7 +149,7 @@ router.get('/:id/export', async (req, res) => {
   try {
     const db = getDb();
     const r: any = db.prepare(`
-      SELECT r.*, s.student_answer_text, s.student_answer_file_path, s.student_name, s.roll_number,
+      SELECT r.*, s.student_answer_text, s.student_answer_file_path, s.source_type, s.student_name, s.roll_number,
              q.title as question_title, q.subject as question_subject, q.model_answer_text
       FROM grading_results r
       JOIN submissions s ON r.submission_id = s.id
@@ -194,6 +196,28 @@ router.get('/:id/export', async (req, res) => {
       feedback: p.feedback,
     }));
 
+    // Best-effort: only when we can actually get a real page image for this
+    // submission — a direct photo/scan upload, or (for a PDF with no usable
+    // text layer) its rasterized first page — so the exported PDF can show
+    // the real handwriting next to the AI's transcription and every red
+    // mark, instead of asking the teacher to trust the transcription alone.
+    // Omitted entirely if the file is missing or rendering fails; the export
+    // itself must never fail because of this.
+    let originalImageBuffer: Buffer | undefined;
+    try {
+      if (r.student_answer_file_path && fs.existsSync(r.student_answer_file_path)) {
+        if (r.source_type === 'image') {
+          originalImageBuffer = fs.readFileSync(r.student_answer_file_path);
+        } else if (r.source_type === 'pdf') {
+          const fileBuffer = fs.readFileSync(r.student_answer_file_path);
+          const pages = await renderPdfPagesToImages(fileBuffer, 1);
+          if (pages.length > 0) originalImageBuffer = pages[0];
+        }
+      }
+    } catch (err: any) {
+      console.error('Could not prepare original-answer image for PDF export:', err?.message || err);
+    }
+
     const pdfBuffer = await exportAnnotatedPdf(
       r.student_answer_text || '',
       parsedAnnotations,
@@ -203,6 +227,7 @@ router.get('/:id/export', async (req, res) => {
         questionTitle: r.question_title,
         subject: r.question_subject,
         modelAnswerText: r.model_answer_text,
+        originalImageBuffer,
       },
       exportPointResults,
       {

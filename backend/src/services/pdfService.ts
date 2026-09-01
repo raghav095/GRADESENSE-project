@@ -68,6 +68,12 @@ export interface ExportMeta {
   questionTitle?: string;
   subject?: string;
   modelAnswerText?: string;
+  /** The real page image (a direct photo/scan upload, or a rasterized PDF page) — embedded as its own reference page when present. */
+  originalImageBuffer?: Buffer;
+}
+
+function isPngBuffer(buf: Buffer): boolean {
+  return buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
 }
 
 export interface ExportRubricPoint {
@@ -390,6 +396,48 @@ export async function exportAnnotatedPdf(
       }
     });
   });
+
+  // Original Uploaded Answer — the actual photographed/scanned page, so a
+  // teacher can check the AI's transcription and every red mark above
+  // directly against the real handwriting, not just trust the reading of
+  // it. Best-effort: only present when the caller could actually get an
+  // image for this submission; silently omitted otherwise, and any failure
+  // here must never break the export itself.
+  if (meta.originalImageBuffer) {
+    try {
+      const image = isPngBuffer(meta.originalImageBuffer)
+        ? await pdfDoc.embedPng(meta.originalImageBuffer)
+        : await pdfDoc.embedJpg(meta.originalImageBuffer);
+
+      const originalPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+      originalPage.drawText('Original Uploaded Answer (as submitted)', {
+        x: MARGIN_X,
+        y: PAGE_HEIGHT - 45,
+        size: 16,
+        font: fontBold,
+        color: COLOR.ink,
+      });
+      originalPage.drawText('Shown for direct reference — check the transcription and every red mark above against the real handwriting here.', {
+        x: MARGIN_X,
+        y: PAGE_HEIGHT - 63,
+        size: 9,
+        font,
+        color: COLOR.inkSoft,
+      });
+
+      const maxW = PAGE_WIDTH - MARGIN_X * 2;
+      const maxH = PAGE_HEIGHT - 100;
+      const scaled = image.scaleToFit(maxW, maxH);
+      originalPage.drawImage(image, {
+        x: MARGIN_X + (maxW - scaled.width) / 2,
+        y: 50 + (maxH - scaled.height) / 2,
+        width: scaled.width,
+        height: scaled.height,
+      });
+    } catch (err: any) {
+      console.error('Failed to embed original answer image into exported PDF:', err?.message || err);
+    }
+  }
 
   // Full rubric breakdown page — every point, not just the flagged ones, so
   // the exported PDF alone carries everything the brief's "expected grading
