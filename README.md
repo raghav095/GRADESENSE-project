@@ -93,7 +93,7 @@ Open **`http://localhost:3000`** in your browser.
 
 ## Automated Test Suite
 
-GradeSense includes 13 automated unit and integration tests covering all brief requirements, the adversarial reasoning-vs-similarity cases, and the reliability edge cases.
+GradeSense includes 14 automated unit and integration tests. The first 8 map directly to the assignment's required test cases; the remaining 6 cover reasoning-vs-keyword-similarity and additional reliability edge cases found during development.
 
 ### Run Tests
 ```bash
@@ -104,21 +104,22 @@ npm run test:backend
 ```
  RUN  v3.2.7 /Users/raghavrathi/Gradesense/backend
 
- ✓ tests/gradingPipeline.test.ts (13 tests)
-   ✓ 1. Should award max marks for a fully correct answer fixture
-   ✓ 2. Should correctly calculate mixed marks for a partially correct answer (Ananya Rao Q1)
-   ✓ 3. Should award 0 or low marks for an entirely incorrect answer
-   ✓ 4. Should short-circuit blank answers to 0 marks without invoking LLM API
-   ✓ 5. Should match evidence and grade accurately despite OCR-like spelling errors
-   ✓ 6. Should handle malformed model output gracefully and flag for human review
-   ✓ 7. Should fall back to degraded mode on primary API failure
-   ✓ 8. Should strictly clamp marks to maxMarks and recompute total sum
+ ✓ tests/gradingPipeline.test.ts (14 tests)
+   ✓ 1. Should award max marks for a fully correct answer fixture                      [required: fully correct answer]
+   ✓ 2. Should correctly calculate mixed marks for a partially correct answer          [required: partially correct answer]
+   ✓ 3. Should award 0 or low marks for an entirely incorrect answer                   [required: incorrect answer]
+   ✓ 4. Should short-circuit blank answers to 0 marks without invoking LLM API         [required: blank answer]
+   ✓ 5. Should match evidence and grade accurately despite OCR-like spelling errors    [required: OCR-like spelling errors]
+   ✓ 6. Should handle malformed model output gracefully and flag for human review     [required: malformed model output]
+   ✓ 7. Should fall back to degraded mode on primary API failure                       [required: model/API failure]
+   ✓ 8. Should strictly clamp marks to maxMarks and recompute total sum                [required: score would exceed max]
    ✓ 9. Should award 5/5 to English essay arguing OPPOSITE conclusion with strong reasoning
    ✓ 10. Should award 5/5 to Science answer using unique vocabulary but correct physics
    ✓ 11. Should mark voltmeter in series as incorrect despite keyword overlap
    ✓ 12. Should flag needsHumanReview even on a full-score result if evidence is unmatched
    ✓ 13. Should place annotation boxes at the evidence quote's real computed position
+   ✓ 14. Should grade a genuinely different, correct Q1 answer on its own merits, not as Ananya's fixed wrong answers
 
  Test Files  1 passed (1)
-      Tests  13 passed (13)
+      Tests  14 passed (14)
 ```

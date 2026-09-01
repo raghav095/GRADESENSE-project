@@ -215,8 +215,20 @@ router.get('/:id/export', async (req, res) => {
       }
     );
 
+    // A raw result ID ("annotated-grade-res-<uuid>.pdf") tells a teacher
+    // nothing about which paper it is once they've downloaded a few —
+    // built from the student's name and the question instead.
+    const filenameSafe = (s: string) =>
+      s
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '') // strip accents (post-NFKD combining marks)
+        .replace(/[^a-zA-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 60) || 'Unknown';
+    const downloadName = `${filenameSafe(r.student_name || 'Student')}_${filenameSafe(r.question_title || 'Question')}_Annotated.pdf`;
+
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="annotated-grade-${r.id}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
     res.send(pdfBuffer);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

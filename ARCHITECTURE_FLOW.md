@@ -22,7 +22,11 @@ Gradesense/
 │   │   │   │                        #   with real character offsets, verification, confidence, annotation placement
 │   │   │   ├── mockGrader.ts        # Zero-dependency deterministic grader with fixture-based verification rule evaluation
 │   │   │   ├── geminiGrader.ts      # Live Google Gemini / Vertex AI SDK grader (@google/genai) + GraderCallError
-│   │   │   └── pdfService.ts        # pdf-parse text extraction + pdf-lib canonical PDF renderer/annotation exporter
+│   │   │   ├── pdfService.ts        # pdfjs-dist text extraction + pdf-lib canonical PDF renderer/annotation exporter
+│   │   │   ├── docxService.ts       # mammoth DOCX text extraction (question papers and student answers, alongside PDF)
+│   │   │   ├── studentMeta.ts       # Regex fallback-fill of student name/roll from a "Name:"/"Roll No:" line in the upload
+│   │   │   └── pdfRasterize.ts      # Shells out to poppler's pdftoppm to render a PDF page to PNG for Gemini vision input
+│   │   │                            #   (optional system dependency — gracefully no-ops if poppler isn't installed)
 │   │   ├── routes/
 │   │   │   ├── questions.ts         # GET/POST questions & rubric points
 │   │   │   ├── submissions.ts       # POST upload student paper & POST trigger grading pipeline
@@ -30,7 +34,7 @@ Gradesense/
 │   │   │   └── annotations.ts       # Decoupled CRUD endpoints (PATCH, POST, DELETE annotations)
 │   │   └── server.ts                # Express server entry point (port from $PORT, default 3001)
 │   └── tests/
-│       └── gradingPipeline.test.ts  # 13 automated Vitest unit & integration edge-case tests
+│       └── gradingPipeline.test.ts  # 14 automated Vitest unit & integration edge-case tests
 │
 ├── frontend/
 │   ├── src/
@@ -230,7 +234,7 @@ studentAnswerText (original, unmodified)
                           [ pdfService.exportAnnotatedPdf ]
                           - Renders a clean, paginated PDF from the extracted answer text using
                             the SAME textLayout module that computed every annotation's position
-                            (deliberate: pdf-parse gives text only, no glyph coordinates, so
+                            (deliberate: pdfjs-dist gives text only, no glyph coordinates, so
                             drawing on top of an arbitrary uploaded PDF's original bytes would be
                             guesswork — this guarantees every box is exactly where its quote is)
                           - Draws each stored annotation box/underline + correction callout
