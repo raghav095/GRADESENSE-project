@@ -82,8 +82,12 @@ router.post('/', upload.single('file'), async (req, res) => {
           const meta = extractStudentMeta(transcribed);
           if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
           if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
+          // Kept short deliberately — the exported PDF's score banner only has
+          // room for two wrapped lines (a fixed layout budget shared with
+          // annotation-position math, see textLayout.ts), and a longer message
+          // here was silently truncating mid-sentence in that banner.
           extractionNote =
-            'This image was transcribed using AI — likely a photographed or handwritten answer sheet, with no machine-readable text to cross-check it against. AI transcription of handwriting is not always fully accurate. Check the original uploaded file before trusting this score.';
+            "This image was transcribed using AI. Handwriting transcription isn't always fully accurate — check the original uploaded file before trusting this score.";
         } else {
           // Could not read it at all. This must NOT be treated as a
           // confident blank answer further down the pipeline — the student
@@ -91,7 +95,7 @@ router.post('/', upload.single('file'), async (req, res) => {
           // (no live Gemini credentials configured, or the call failed) —
           // so it's flagged distinctly rather than silently scored 0/100%.
           extractionNote =
-            'This image could not be read — either AI vision transcription is not configured (no live Gemini credentials) or the attempt failed. This is NOT a confident blank; check the original uploaded file directly before trusting any score here.';
+            'This image could not be read (no live credentials, or the read failed). This is NOT a confident blank — check the original file before trusting any score here.';
         }
       } else {
         let extractedText = '';
@@ -141,7 +145,7 @@ router.post('/', upload.single('file'), async (req, res) => {
                 if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
                 if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
                 extractionNote =
-                  'This PDF had almost no machine-readable text, so its content was transcribed from the page image using AI — likely a scanned or handwritten answer sheet. AI transcription of handwriting is not always fully accurate. Check the original uploaded file before trusting this score.';
+                  'This PDF had almost no machine-readable text, so its content was transcribed from the page image using AI. Check the original file before trusting this score.';
               }
             }
           } catch {
@@ -155,9 +159,7 @@ router.post('/', upload.single('file'), async (req, res) => {
         // nothing" — only set if the vision fallback above didn't already
         // produce a better note.
         if (!extractionNote && looksLikeLowText) {
-          extractionNote = `This ${sourceType === 'docx' ? 'DOCX' : 'PDF'} yielded very little extractable text${
-            sourceType === 'pdf' ? ' relative to its page count' : ''
-          } — it may contain a scanned image, handwriting, or a diagram that this system cannot read as text. Check the original uploaded file before trusting this score.`;
+          extractionNote = `This ${sourceType === 'docx' ? 'DOCX' : 'PDF'} yielded very little extractable text — it may contain a scan, handwriting, or a diagram. Check the original file before trusting this score.`;
         }
       }
     }

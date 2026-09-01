@@ -466,7 +466,14 @@ export async function exportAnnotatedPdf(
       if (y < 70) break; // one page is ample for the short rubric lists this tool grades against
 
       notesPage.drawRectangle({ x: MARGIN_X, y: y - 3, width: 8, height: 8, color });
-      notesPage.drawText(label, { x: MARGIN_X + 14, y, size: 10.5, font: fontBold, color: COLOR.ink });
+      // A long criterion (common — these are full rubric sentences) was
+      // previously drawn as one unwrapped line and could run straight into
+      // the marks-awarded figure on the right. Wrapped narrowly enough that
+      // even its first line never reaches that column.
+      const labelLines = wrapPlainText(label, 72);
+      labelLines.forEach((line, i) => {
+        notesPage.drawText(line, { x: MARGIN_X + 14, y: y - i * 13, size: 10.5, font: fontBold, color: COLOR.ink });
+      });
       notesPage.drawText(`${pr.marksAwarded}/${pr.maxMarks}`, {
         x: PAGE_WIDTH - MARGIN_X - 30,
         y,
@@ -474,7 +481,7 @@ export async function exportAnnotatedPdf(
         font: fontBold,
         color,
       });
-      y -= 15;
+      y -= labelLines.length * 13 + 2;
 
       for (const line of wrapPlainText(sanitizeFreely(font, pr.feedback), 95)) {
         if (y < 60) break;
