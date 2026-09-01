@@ -305,11 +305,13 @@ export const Stage1Provide: React.FC<Stage1ProvideProps> = ({ questions, onGradi
                 acceptFile(e.dataTransfer.files?.[0] || null);
               }}
             >
-              <Upload size={22} color="var(--ink-soft)" style={{ margin: '0 auto 0.5rem' }} />
-              <input type="file" accept=".pdf" disabled={disabled} onChange={e => acceptFile(e.target.files?.[0] || null)} style={{ display: 'none' }} id="file-upload" />
-              <label htmlFor="file-upload" style={{ cursor: disabled ? 'default' : 'pointer', color: 'var(--ink)', fontWeight: 600, fontSize: '0.9375rem' }}>
-                {file ? file.name : 'Drop a PDF here, or click to upload'}
-              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                <Upload size={22} color="var(--ink-soft)" />
+                <input type="file" accept=".pdf" disabled={disabled} onChange={e => acceptFile(e.target.files?.[0] || null)} style={{ display: 'none' }} id="file-upload" />
+                <label htmlFor="file-upload" style={{ cursor: disabled ? 'default' : 'pointer', color: 'var(--ink)', fontWeight: 600, fontSize: '0.9375rem' }}>
+                  {file ? file.name : 'Drop a PDF here, or click to upload'}
+                </label>
+              </div>
             </div>
           ) : (
             <textarea
