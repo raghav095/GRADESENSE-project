@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, X, Sparkles, Upload } from 'lucide-react';
 
 interface AddQuestionFormProps {
@@ -52,8 +52,13 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
   const [saving, setSaving] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [draftedFromAI, setDraftedFromAI] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const totalMarks = rubricPoints.reduce((sum, r) => sum + (Number(r.maxMarks) || 0), 0);
+  const hasContent = Boolean(
+    subject.trim() || title.trim() || text.trim() || modelAnswerText.trim() || file || rubricPoints.some(r => r.criterion.trim())
+  );
+  const hasDraftableContent = Boolean(modelAnswerText.trim() || rubricPoints.some(r => r.criterion.trim()));
   const canSubmit =
     title.trim().length > 0 &&
     text.trim().length > 0 &&
@@ -68,8 +73,34 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
   const addRow = () => setRubricPoints(rows => [...rows, { criterion: '', maxMarks: '1' }]);
   const removeRow = (idx: number) => setRubricPoints(rows => rows.filter((_, i) => i !== idx));
 
+  // Closing (X, Cancel, backdrop click, or Escape) used to discard whatever
+  // was typed or drafted with no warning — a real way to lose a few minutes
+  // of work by a stray click. Only asks when there's actually something to lose.
+  const handleClose = () => {
+    if (hasContent && !window.confirm('Discard this question? Anything you typed or drafted will be lost.')) return;
+    onCancel();
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasContent]);
+
+  const acceptFile = (f: File | null) => {
+    if (f && f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')) return;
+    setFile(f);
+  };
+
   const handleDraft = async () => {
     if (!canDraft || drafting) return;
+    // Drafting a second time silently overwrote whatever model answer/rubric
+    // was already there (AI-drafted or hand-typed) — only warn when there's
+    // actually something on the line.
+    if (hasDraftableContent && !window.confirm('This will replace the current model answer and rubric with a new AI draft. Continue?')) return;
     setDrafting(true);
     setError(null);
     try {
@@ -130,8 +161,15 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem' }}>
-      <div className="card" style={{ width: '100%', maxWidth: 960, maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: 'var(--paper-raised)', border: '1px solid var(--rule)', padding: '1.75rem' }}>
+    <div
+      onClick={handleClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '2rem' }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        className="card"
+        style={{ width: '100%', maxWidth: 960, maxHeight: '92vh', display: 'flex', flexDirection: 'column', background: 'var(--paper-raised)', border: '1px solid var(--rule)', padding: '1.75rem' }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '1.25rem', borderBottom: '1px solid var(--rule)', marginBottom: '1.25rem' }}>
           <div>
             <div style={{ fontFamily: 'var(--font-serif)', fontSize: '1.375rem', fontWeight: 600, color: 'var(--ink)' }}>Add a New Question</div>
@@ -139,7 +177,7 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
               Upload or type the question, then optionally draft a starting model answer and rubric with AI — review everything before saving.
             </div>
           </div>
-          <button type="button" onClick={onCancel} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0, marginLeft: '1rem' }}>
+          <button type="button" onClick={handleClose} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer', flexShrink: 0, marginLeft: '1rem' }}>
             <X size={22} />
           </button>
         </div>
@@ -170,13 +208,31 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
               <div>
                 <div style={sectionLabelStyle}>The Question</div>
 
-                <div style={{ border: '1px dashed var(--rule)', background: 'var(--paper)', padding: '1rem', marginBottom: '1.25rem' }}>
+                <div
+                  style={{
+                    border: `1px dashed ${isDragOver ? 'var(--ink)' : 'var(--rule)'}`,
+                    background: isDragOver ? '#FFFFFF' : 'var(--paper)',
+                    padding: '1rem',
+                    marginBottom: '1.25rem',
+                    transition: 'border-color 0.15s, background 0.15s',
+                  }}
+                  onDragOver={e => {
+                    e.preventDefault();
+                    setIsDragOver(true);
+                  }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={e => {
+                    e.preventDefault();
+                    setIsDragOver(false);
+                    acceptFile(e.dataTransfer.files?.[0] || null);
+                  }}
+                >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <label htmlFor="question-pdf-upload" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--ink)', fontWeight: 600 }}>
                       <Upload size={14} />
-                      {file ? file.name : 'Upload the question paper (PDF, optional)'}
+                      {file ? file.name : 'Drop the question paper here, or click to upload (PDF, optional)'}
                     </label>
-                    <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => setFile(e.target.files?.[0] || null)} />
+                    <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => acceptFile(e.target.files?.[0] || null)} />
                     <button
                       type="button"
                       onClick={handleDraft}
@@ -262,7 +318,7 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--rule)' }}>
-            <button type="button" onClick={onCancel} className="btn btn-secondary">
+            <button type="button" onClick={handleClose} className="btn btn-secondary">
               Cancel
             </button>
             <button type="button" onClick={handleSubmit} className="btn btn-primary" disabled={!canSubmit || saving} style={{ minWidth: 160 }}>
