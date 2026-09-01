@@ -9,12 +9,22 @@ export interface ExtractedStudentMeta {
 // shouldn't have to retype what's already on the page, so this is used as a
 // fallback fill only when the form field itself was left blank — an
 // explicitly typed name always wins.
-export function extractStudentMeta(text: string): ExtractedStudentMeta {
-  const nameMatch = text.match(/(?:student\s*)?name\s*[:\-]\s*([^\n\r]{1,60})/i);
-  const rollMatch = text.match(/roll\s*(?:no\.?|number)?\s*[:\-]\s*([^\n\r]{1,20})/i);
+// A real answer-sheet template very often puts Name and Roll No on the SAME
+// physical line ("Name: Ananya Rao   Roll No: 24B"), not separate ones — a
+// capture bounded only by the line break swallowed the roll number straight
+// into the name. Bounded instead by whichever comes first: the next label
+// keyword, a run of 2+ spaces/tabs (the usual column gap on a form line), or
+// the line break itself.
+const FIELD_STOP = '(?=\\s{2,}|\\t|\\bname\\b|\\broll\\b|\\n|\\r|$)';
 
-  const studentName = nameMatch?.[1]?.trim();
-  const rollNumber = rollMatch?.[1]?.trim();
+export function extractStudentMeta(text: string): ExtractedStudentMeta {
+  const nameMatch = text.match(new RegExp(`(?:student\\s*)?name\\s*[:\\-]\\s*(.{1,60}?)${FIELD_STOP}`, 'i'));
+  const rollMatch = text.match(new RegExp(`roll\\s*(?:no\\.?|number)?\\s*[:\\-]\\s*(.{1,20}?)${FIELD_STOP}`, 'i'));
+
+  // Trim trailing underscores/dashes too — common on a fill-in-the-blank
+  // line when the field is answered partway across a longer blank.
+  const studentName = nameMatch?.[1]?.trim().replace(/[_\-\s]+$/, '');
+  const rollNumber = rollMatch?.[1]?.trim().replace(/[_\-\s]+$/, '');
 
   return {
     studentName: studentName || undefined,
