@@ -67,6 +67,7 @@ export interface ExportMeta {
   rollNumber?: string;
   questionTitle?: string;
   subject?: string;
+  modelAnswerText?: string;
 }
 
 export interface ExportRubricPoint {
@@ -433,6 +434,35 @@ export async function exportAnnotatedPdf(
         y -= 13;
       }
       y -= 10;
+    }
+  }
+
+  // Model Answer — a separate reference page, clearly marked as not graded.
+  // The in-app view has always had a "Model Answer" tab for this, but the
+  // exported PDF never carried it — meaning a teacher without the app open
+  // (which is the whole point of exporting a PDF) had no way to see what
+  // "would improve the answer" alongside the student's own paper.
+  if (meta.modelAnswerText?.trim()) {
+    let modelPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+    let y = PAGE_HEIGHT - 50;
+    modelPage.drawText('Model Answer — Reference', { x: MARGIN_X, y, size: 16, font: fontBold, color: COLOR.ink });
+    y -= 20;
+    modelPage.drawText('Not graded — provided as the marking-scheme reference for this question.', {
+      x: MARGIN_X,
+      y,
+      size: 9,
+      font,
+      color: COLOR.good,
+    });
+    y -= 26;
+
+    for (const line of wrapPlainText(sanitizeFreely(font, meta.modelAnswerText), 92)) {
+      if (y < 60) {
+        modelPage = pdfDoc.addPage([PAGE_WIDTH, PAGE_HEIGHT]);
+        y = PAGE_HEIGHT - 50;
+      }
+      modelPage.drawText(line, { x: MARGIN_X, y, size: 10.5, font, color: COLOR.ink });
+      y -= 15;
     }
   }
 

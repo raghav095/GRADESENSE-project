@@ -148,7 +148,7 @@ router.get('/:id/export', async (req, res) => {
     const db = getDb();
     const r: any = db.prepare(`
       SELECT r.*, s.student_answer_text, s.student_answer_file_path, s.student_name, s.roll_number,
-             q.title as question_title, q.subject as question_subject
+             q.title as question_title, q.subject as question_subject, q.model_answer_text
       FROM grading_results r
       JOIN submissions s ON r.submission_id = s.id
       JOIN questions q ON s.question_id = q.id
@@ -202,6 +202,7 @@ router.get('/:id/export', async (req, res) => {
         rollNumber: r.roll_number,
         questionTitle: r.question_title,
         subject: r.question_subject,
+        modelAnswerText: r.model_answer_text,
       },
       exportPointResults,
       {
