@@ -96,15 +96,15 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectResult }) => {
                 </td>
                 <td>
                   {r.needsHumanReview ? (
-                    <span title={r.reviewReason} style={{ color: 'var(--red-pen)', fontWeight: 600, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span className="status-dot status-dot-bad" /> Needs Review
+                    <span title={r.reviewReason} className="status-tag status-tag-bad">
+                      Needs Review
                     </span>
                   ) : (
                     <span
                       title={r.reviewedAt ? `Manually reviewed ${new Date(r.reviewedAt).toLocaleString()}` : undefined}
-                      style={{ color: 'var(--marks-good)', fontWeight: 600, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: 6 }}
+                      className="status-tag status-tag-good"
                     >
-                      <span className="status-dot status-dot-good" /> {r.reviewedAt ? 'Reviewed' : 'Verified'}
+                      {r.reviewedAt ? 'Reviewed' : 'Verified'}
                     </span>
                   )}
                 </td>

@@ -304,6 +304,26 @@ body {
 .status-dot-partial { background: var(--marks-partial); }
 .status-dot-bad { background: var(--red-pen); }
 
+/* Rectangular status tag — sharp corners, tinted fill, matching the ruled
+   "quiet ink" system instead of a rounded pill that would clash with the
+   border-radius:0 used everywhere else (buttons, cards, tables). */
+.status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.status-tag-good { color: var(--marks-good); background: rgba(62, 107, 79, 0.08); border-color: var(--marks-good); }
+.status-tag-partial { color: var(--marks-partial); background: rgba(184, 134, 46, 0.08); border-color: var(--marks-partial); }
+.status-tag-bad { color: var(--red-pen); background: rgba(178, 58, 46, 0.08); border-color: var(--red-pen); }
+
 .quote-box {
   border-left: 2px solid var(--ink-soft);
   padding-left: 0.75rem;

@@ -227,23 +227,11 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
                     acceptFile(e.dataTransfer.files?.[0] || null);
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    <label htmlFor="question-pdf-upload" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--ink)', fontWeight: 600 }}>
-                      <Upload size={14} />
-                      {file ? file.name : 'Drop the question paper here, or click to upload (PDF, optional)'}
-                    </label>
-                    <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => acceptFile(e.target.files?.[0] || null)} />
-                    <button
-                      type="button"
-                      onClick={handleDraft}
-                      disabled={!canDraft || drafting}
-                      className="btn btn-primary"
-                      style={{ fontSize: '0.8125rem', padding: '0.4rem 0.75rem', opacity: !canDraft || drafting ? 0.6 : 1 }}
-                      title="Sends the question text to the live LLM for a suggested model answer and rubric — only ever pre-fills this form, nothing is saved automatically."
-                    >
-                      <Sparkles size={14} /> {drafting ? 'Drafting...' : 'Draft with AI'}
-                    </button>
-                  </div>
+                  <label htmlFor="question-pdf-upload" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', fontSize: '0.8125rem', color: 'var(--ink)', fontWeight: 600 }}>
+                    <Upload size={14} />
+                    {file ? file.name : 'Drop the question paper here, or click to upload (PDF, optional)'}
+                  </label>
+                  <input id="question-pdf-upload" type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => acceptFile(e.target.files?.[0] || null)} />
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '1rem', marginBottom: '1.25rem' }}>
@@ -257,9 +245,40 @@ export const AddQuestionForm: React.FC<AddQuestionFormProps> = ({ onCreated, onC
                   </div>
                 </div>
 
-                <div className="form-group" style={{ marginBottom: 0 }}>
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
                   <label className="form-label">Question Text</label>
                   <textarea className="form-textarea" rows={9} value={text} onChange={e => setText(e.target.value)} placeholder="Paste or type the full question prompt..." required />
+                </div>
+
+                {/* Placed AFTER both ways of providing the question (upload or
+                    type) instead of crammed inside the dropzone — it reads as
+                    "now draft from what's above," not "part of uploading a file," and stays disabled until there's something to draft from either way. */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    flexWrap: 'wrap',
+                    background: 'var(--paper)',
+                    border: '1px solid var(--rule)',
+                    padding: '0.75rem 1rem',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8125rem', color: 'var(--ink-soft)' }}>
+                    <Sparkles size={14} color="var(--ink)" style={{ flexShrink: 0 }} />
+                    Draft a model answer and rubric from the question above using AI
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDraft}
+                    disabled={!canDraft || drafting}
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.8125rem', padding: '0.4rem 0.75rem', flexShrink: 0, opacity: !canDraft || drafting ? 0.6 : 1 }}
+                    title="Sends the question text to the live LLM for a suggested model answer and rubric — only ever pre-fills this form, nothing is saved automatically."
+                  >
+                    <Sparkles size={14} /> {drafting ? 'Drafting...' : 'Draft with AI'}
+                  </button>
                 </div>
               </div>
 
