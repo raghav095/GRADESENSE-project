@@ -13,13 +13,15 @@ import { toPublicFileUrl } from '../services/fileUrl.js';
 import { extractStudentMeta } from '../services/studentMeta.js';
 import { Submission } from '../services/types.js';
 
+import { extractHandwrittenTextLocally } from '../services/localOcrService.js';
+
 // A photographed or scanned answer sheet (PNG/JPG) has no text layer at
 // all — there's nothing for pdfjs-style extraction to find. These are
 // accepted and routed straight to Gemini vision transcription instead
 // (GeminiGrader.transcribeHandwriting) — the real "student wrote it by hand,
 // took a photo, uploaded it" workflow. If no live Gemini credentials are
-// configured, this fails gracefully (see below) rather than silently
-// grading an empty answer as if it were confidently blank.
+// configured, this falls back to local HTR/OCR (localOcrService) rather than
+// silently grading an empty answer as if it were confidently blank.
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
 const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.png', '.jpg', '.jpeg']);
 
@@ -74,28 +76,37 @@ router.post('/', upload.single('file'), async (req, res) => {
 
       if (sourceType === 'image') {
         // A photographed/scanned answer sheet — no text layer exists at
-        // all, so this always goes straight to vision transcription (the
-        // uploaded image IS the page; no rasterization step needed).
-        const transcribed = await new GeminiGrader().transcribeHandwriting([fileBuffer]);
+        // all, so this goes straight to vision transcription (the uploaded
+        // image IS the page; no rasterization step needed).
+        let transcribed: string | null = null;
+        try {
+          transcribed = await new GeminiGrader().transcribeHandwriting([fileBuffer]);
+        } catch {
+          transcribed = null;
+        }
+
         if (transcribed) {
           finalAnswerText = transcribed;
           const meta = extractStudentMeta(transcribed);
           if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
           if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
-          // Kept short deliberately — the exported PDF's score banner only has
-          // room for two wrapped lines (a fixed layout budget shared with
-          // annotation-position math, see textLayout.ts), and a longer message
-          // here was silently truncating mid-sentence in that banner.
           extractionNote =
             "This image was transcribed using AI. Handwriting transcription isn't always fully accurate — check the original uploaded file before trusting this score.";
         } else {
-          // Could not read it at all. This must NOT be treated as a
-          // confident blank answer further down the pipeline — the student
-          // may have written a full page that simply couldn't be read
-          // (no live Gemini credentials configured, or the call failed) —
-          // so it's flagged distinctly rather than silently scored 0/100%.
-          extractionNote =
-            'This image could not be read (no live credentials, or the read failed). This is NOT a confident blank — check the original file before trusting any score here.';
+          // Cloud AI transcription unavailable or returned empty — try local HTR fallback
+          const localTranscribed = await extractHandwrittenTextLocally(fileBuffer);
+          if (localTranscribed) {
+            finalAnswerText = localTranscribed;
+            const meta = extractStudentMeta(localTranscribed);
+            if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
+            if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
+            extractionNote =
+              "Transcribed using local HTR fallback (Cloud AI unavailable). Please verify accuracy against original handwritten note.";
+          } else {
+            // Could not read locally or via cloud
+            extractionNote =
+              'This image could not be read (Cloud API and local OCR were unavailable). This is NOT a confident blank — check the original file before trusting any score here.';
+          }
         }
       } else {
         let extractedText = '';
@@ -121,24 +132,20 @@ router.post('/', upload.single('file'), async (req, res) => {
 
         // A one-page PDF (or any DOCX) that yields under ~40 characters of
         // extractable text usually means the page is mostly a scanned image,
-        // handwriting, or a diagram — pdfjs's text-layer extraction can't
-        // read pixels, only an actual embedded text layer.
+        // handwriting, or a diagram.
         const looksLikeLowText = extractedText.length < pageCount * 40;
 
-        // For a PDF specifically (rasterization isn't built for DOCX), attempt
-        // to actually read it via Gemini vision instead of only flagging it —
-        // this is the scanned/photographed handwritten answer sheet case,
-        // just arriving as a PDF instead of a raw image. Best-effort:
-        // silently does nothing if poppler isn't installed or no live
-        // credentials are configured, falling through to the existing
-        // honest review-flag note below either way. AI transcription of
-        // handwriting is never treated as fully trustworthy on its own —
-        // when it succeeds, the note below still asks a human to verify it.
         if (looksLikeLowText && sourceType === 'pdf') {
           try {
             const pageImages = await renderPdfPagesToImages(fileBuffer);
             if (pageImages.length > 0) {
-              const transcribed = await new GeminiGrader().transcribeHandwriting(pageImages);
+              let transcribed: string | null = null;
+              try {
+                transcribed = await new GeminiGrader().transcribeHandwriting(pageImages);
+              } catch {
+                transcribed = null;
+              }
+
               if (transcribed && transcribed.length > extractedText.length) {
                 finalAnswerText = transcribed;
                 const meta = extractStudentMeta(transcribed);
@@ -146,11 +153,21 @@ router.post('/', upload.single('file'), async (req, res) => {
                 if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
                 extractionNote =
                   'This PDF had almost no machine-readable text, so its content was transcribed from the page image using AI. Check the original file before trusting this score.';
+              } else {
+                // Try local OCR on the first page image
+                const localTranscribed = await extractHandwrittenTextLocally(pageImages[0]);
+                if (localTranscribed && localTranscribed.length > extractedText.length) {
+                  finalAnswerText = localTranscribed;
+                  const meta = extractStudentMeta(localTranscribed);
+                  if (!finalStudentName && meta.studentName) finalStudentName = meta.studentName;
+                  if (!finalRollNumber && meta.rollNumber) finalRollNumber = meta.rollNumber;
+                  extractionNote =
+                    'This PDF had very little text, so its content was transcribed using local HTR fallback. Check the original file before trusting this score.';
+                }
               }
             }
           } catch {
-            // Vision transcription unavailable or failed — falls through to
-            // the plain extraction-quality note below, unchanged.
+            // Local & Cloud vision transcription unavailable or failed
           }
         }
 

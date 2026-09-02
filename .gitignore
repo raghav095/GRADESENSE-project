@@ -30,3 +30,6 @@ backend/uploads/
 
 # Logs
 npm-debug.log*
+
+# OCR / Tesseract data files
+*.traineddata
